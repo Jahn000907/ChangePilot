@@ -1,0 +1,1 @@
+"""ChangePilot domain errors module."""

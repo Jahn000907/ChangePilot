@@ -1,0 +1,1 @@
+"""ChangePilot application configuration module."""

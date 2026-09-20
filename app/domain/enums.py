@@ -1,0 +1,1 @@
+"""ChangePilot domain enumerations module."""
