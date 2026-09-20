@@ -1,0 +1,23 @@
+{
+  "scenario_id": "CASE-EOL-001",
+  "description": "供应商停止供应 BRG-6204-A 的外部事件输入，只描述事件本身，不预先创建任何 ECM 数据。",
+  "source_type": "SUPPLIER_NOTICE",
+  "supplier_code": "SUP-001",
+  "supplier": "MotionWorks",
+  "part_number": "BRG-6204-A",
+  "revision_code": "A",
+  "last_time_buy_date": "2026-11-30",
+  "eol_date": "2027-01-31",
+  "suggested_replacement": {
+    "part_number": "BRG-6204-B",
+    "revision_code": "A",
+    "qualification_status": "QUALIFIED"
+  },
+  "rejected_alternative": {
+    "part_number": "BRG-6204-C",
+    "revision_code": "A",
+    "qualification_status": "UNQUALIFIED"
+  },
+  "plant_code": "CN-E01",
+  "warehouse_code": "WH-01"
+}
