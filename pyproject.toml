@@ -1,11 +1,37 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "changepilot"
 version = "0.1.0"
 description = "制造业工程变更影响分析与执行智能体平台"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 
-dependencies = []
+dependencies = [
+    # 配置管理
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    # PostgreSQL：事务数据、工程变更、Agent Trace、Audit
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13,<2.0",
+    "psycopg[binary]>=3.2,<4.0",
+    # Neo4j：产品结构与 BOM 图数据
+    "neo4j>=6.0,<7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<10.0",
+    "ruff>=0.9,<1.0",
+]
+
+# 显式声明打包范围，避免 setuptools 在扁平多顶层目录布局中自动猜测：
+# 只打包 app 包及其子包，tests / scripts / docs / infra / data / evals / mcp_servers / web 均不打包。
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]
 
 [tool.ruff]
 target-version = "py312"
