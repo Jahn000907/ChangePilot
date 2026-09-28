@@ -287,6 +287,16 @@ class ProductStructureRepository:
     # ------------------------------------------------------------------
     # Queries
     # ------------------------------------------------------------------
+    def list_revision_codes(self, part_number: str) -> list[str]:
+        """Return known revisions so callers never assume a default revision."""
+        rows = self._run(
+            """MATCH (:Part {part_number: $part_number})-[:HAS_REVISION]->(r:PartRevision)
+               RETURN DISTINCT r.revision_code AS revision_code
+               ORDER BY revision_code""",
+            part_number=part_number,
+        )
+        return [str(row["revision_code"]) for row in rows]
+
     def get_part_revision(
         self, part_number: str, revision_code: str
     ) -> PartRevisionFact | None:

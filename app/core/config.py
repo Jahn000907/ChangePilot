@@ -99,6 +99,23 @@ class Neo4jSettings(BaseSettings):
         return value
 
 
+class LLMSettings(BaseSettings):
+    """DeepSeek settings for the OpenAI-compatible LLM client."""
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    deepseek_api_key: SecretStr | None = None
+    deepseek_base_url: str = Field(default="https://api.deepseek.com", min_length=1)
+    deepseek_model: str = Field(default="deepseek-chat", min_length=1)
+    llm_temperature: float = Field(default=0.2, ge=0, le=2)
+    llm_timeout_seconds: float = Field(default=60, ge=1, le=300)
+    llm_max_retries: int = Field(default=2, ge=0, le=5)
+
+
 class Settings(BaseSettings):
     """Root settings object grouping application and database settings."""
 
@@ -113,6 +130,7 @@ class Settings(BaseSettings):
 
     postgres: PostgresSettings = Field(default_factory=PostgresSettings)
     neo4j: Neo4jSettings = Field(default_factory=Neo4jSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
 
     @field_validator("log_level", mode="before")
     @classmethod

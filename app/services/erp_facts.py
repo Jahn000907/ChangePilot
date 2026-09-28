@@ -105,7 +105,7 @@ class ERPFactService:
     # Purchase facts
     # ------------------------------------------------------------------
     def purchase_order_lines(
-        self, part_number: str, revision_code: str
+        self, part_number: str, revision_code: str, *, open_only: bool = False
     ) -> PurchaseOrderFactResult:
         """Return purchase order lines for a part revision, statuses included."""
         part_number = _require_identifier(part_number, "part_number")
@@ -116,6 +116,13 @@ class ERPFactService:
                 part_number, revision_code
             )
         ]
+        if open_only:
+            rows = [
+                row for row in rows
+                if row.po_status not in {"COMPLETED", "CANCELLED"}
+                and row.line_status != "CANCELLED"
+                and row.ordered_qty > row.received_qty
+            ]
         return PurchaseOrderFactResult(
             part_number=part_number, revision_code=revision_code, rows=rows
         )

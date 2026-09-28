@@ -8,6 +8,7 @@ imported and re-exported here.
 from __future__ import annotations
 
 from app.db.postgres.models.agent import AgentRun, AgentStep, ToolCall
+from app.db.postgres.models.assistant import AssistantConversation, AssistantMessage
 from app.db.postgres.models.audit import AuditEvent
 from app.db.postgres.models.ecm import (
     ApprovalRecord,
@@ -37,6 +38,8 @@ from app.db.postgres.models.erp import (
 __all__ = [
     "AgentRun",
     "AgentStep",
+    "AssistantConversation",
+    "AssistantMessage",
     "ApprovalRecord",
     "AuditEvent",
     "BOMRedline",

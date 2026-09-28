@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from app.domain.dto.approval import (
+    ApprovalDecision,
+    HumanApproval,
+    HumanApprovalRequest,
+)
+from app.domain.dto.change_case import (
+    SupplierEOLChangeCaseInput,
+    SupplierEOLChangeCaseResult,
+)
 from app.domain.dto.eol_impact import (
     IMPACT_CAVEATS,
     AlternativeImpact,
@@ -28,6 +37,7 @@ from app.domain.dto.erp_facts import (
     SupplierFact,
     SupplierFactResult,
 )
+from app.domain.dto.execution import ExecutionResult, ExecutionResultStatus
 from app.domain.dto.impact_metrics import (
     AlternativeAssessment,
     AlternativeClassification,
@@ -54,6 +64,12 @@ from app.domain.dto.product_structure import (
     WhereUsedResult,
     WhereUsedRow,
 )
+from app.domain.dto.review import ReviewDecision, ReviewResult
+from app.domain.dto.strategy import (
+    StrategyCandidate,
+    StrategyGenerationResult,
+    StrategyType,
+)
 
 __all__ = [
     "IMPACT_CAVEATS",
@@ -62,10 +78,15 @@ __all__ = [
     "AlternativeImpact",
     "AlternativeResult",
     "AlternativeRow",
+    "ApprovalDecision",
     "BOMQuantityEvidence",
     "BOMQuantityImpact",
     "BomExplosionResult",
     "BomExplosionRow",
+    "ExecutionResult",
+    "ExecutionResultStatus",
+    "HumanApproval",
+    "HumanApprovalRequest",
     "InventoryFact",
     "InventoryFactResult",
     "InventoryImpact",
@@ -85,6 +106,8 @@ __all__ = [
     "PurchaseOrderAssessment",
     "PurchaseOrderFact",
     "PurchaseOrderFactResult",
+    "ReviewDecision",
+    "ReviewResult",
     "SalesExposureClass",
     "SalesExposureMetrics",
     "SalesImpact",
@@ -92,6 +115,11 @@ __all__ = [
     "SalesOrderAssessment",
     "SalesOrderFact",
     "SalesOrderFactResult",
+    "StrategyCandidate",
+    "StrategyGenerationResult",
+    "StrategyType",
+    "SupplierEOLChangeCaseInput",
+    "SupplierEOLChangeCaseResult",
     "SupplierEOLImpactResult",
     "SupplierEOLMetrics",
     "SupplierFact",

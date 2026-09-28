@@ -1,0 +1,24 @@
+{
+  "scenario_id": "CASE-EOL-001",
+  "scenario_file": "../../data/scenarios/supplier_eol_brg_6204_a.json",
+  "as_of_date": "2026-09-20",
+  "expected": {
+    "affected_finished_products": [
+      "ROB-P100",
+      "ROB-P200",
+      "CON-C100",
+      "PAL-P300"
+    ],
+    "inventory_available_qty": "700",
+    "purchase_committed_open_qty": "900",
+    "purchase_order_count": 3,
+    "production_frozen_demand_qty": "322",
+    "production_order_count": 9,
+    "alternatives": {
+      "BRG-6204-B": "QUALIFIED",
+      "BRG-6204-C": "UNQUALIFIED"
+    },
+    "expects_purchase_impact": true,
+    "expects_production_impact": true
+  }
+}

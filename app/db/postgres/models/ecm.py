@@ -76,7 +76,7 @@ class ChangeCase(Base):
         UniqueConstraint("idempotency_key", name="uq_change_cases_idempotency_key"),
         CheckConstraint(
             "case_type IN ('SUPPLIER_EOL', 'QUALITY_ISSUE', 'CUSTOMER_CHANGE', "
-            "'COST_REDUCTION', 'REGULATORY_CHANGE')",
+            "'COST_REDUCTION', 'REGULATORY_CHANGE', 'MATERIAL_SUBSTITUTION')",
             name="ck_change_cases_case_type",
         ),
         CheckConstraint(

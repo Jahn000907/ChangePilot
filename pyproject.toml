@@ -19,12 +19,25 @@ dependencies = [
     "psycopg[binary]>=3.2,<4.0",
     # Neo4j：产品结构与 BOM 图数据
     "neo4j>=6.0,<7.0",
+    # LangGraph：确定性 Agent 工作流编排
+    "langgraph>=1.0,<2.0",
+    "langgraph-checkpoint-postgres>=3.1,<3.2",
+    # LangChain Core：结构化 Tool 与 Tool Calling 消息协议
+    "langchain-core>=1.0,<2.0",
+    # DeepSeek：OpenAI-compatible API 客户端
+    "openai>=1.58,<3.0",
+    # 可选启用的开发 Trace / Experiment；关闭时不调用外部服务
+    "langsmith>=0.14,<0.15",
+    # 最小 HTTP API 入口
+    "fastapi>=0.115,<1.0",
+    "uvicorn>=0.34,<1.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3,<10.0",
     "ruff>=0.9,<1.0",
+    "httpx>=0.28,<1.0",
 ]
 
 # 显式声明打包范围，避免 setuptools 在扁平多顶层目录布局中自动猜测：

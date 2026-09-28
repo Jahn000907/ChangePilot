@@ -22,6 +22,7 @@ from math import prod
 
 from pydantic import ValidationError
 
+from app.core.business_time import current_business_date
 from app.db.neo4j.repositories.product_structure import (
     DEFAULT_BOM_STATUSES,
     AlternativeFact,
@@ -62,7 +63,7 @@ def default_business_date() -> date:
     local date is the correct default; callers that need a reproducible result
     pass ``as_of_date`` explicitly (and tests inject their own provider).
     """
-    return date.today()  # noqa: DTZ011 - a business date is a local calendar day
+    return current_business_date()
 
 
 class ProductStructureService:
@@ -89,6 +90,26 @@ class ProductStructureService:
     # ------------------------------------------------------------------
     # Public operations
     # ------------------------------------------------------------------
+    def list_revision_codes(self, part_number: str) -> list[str]:
+        """Look up available revisions without guessing one in the assistant."""
+        return self._repository.list_revision_codes(_validate_identifier(part_number, "part_number"))
+
+    def effective_revision_codes(
+        self, part_number: str, as_of_date: date | None = None
+    ) -> list[str]:
+        """Resolve released revisions effective on the same business date as BOM queries."""
+        business_date = self._resolve_as_of_date(as_of_date)
+        return [
+            code for code in self.list_revision_codes(part_number)
+            if (revision := self.get_part_revision(part_number, code)).lifecycle_state == "RELEASED"
+            and (revision.effective_from is None or revision.effective_from <= business_date)
+            and (revision.effective_to is None or business_date <= revision.effective_to)
+        ]
+
+    def current_business_date(self) -> date:
+        """Expose the configured business-date provider for read Tool defaults."""
+        return self._resolve_as_of_date(None)
+
     def get_part_revision(
         self, part_number: str, revision_code: str
     ) -> PartRevisionDTO:
