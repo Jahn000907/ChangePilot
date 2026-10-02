@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.assistant_queries import extract_entities, substitution_pair
 from app.agents.enterprise_assistant import EnterpriseAssistant, ToolFact
+from app.agents.supervisor import SupervisorPlanningError
 from app.db.postgres.repositories.assistant import AssistantRepository
 from app.db.postgres.session import create_session
 from app.domain.dto.assistant import (
@@ -19,6 +20,7 @@ from app.domain.dto.assistant import (
     ConversationSummary,
     WorkflowSuggestion,
 )
+from app.llm.client import LLMResponseError
 from app.services.trace import TraceService
 
 
@@ -52,6 +54,15 @@ class AssistantService:
                 **self._summary(row).model_dump(),
                 messages=[self._message(item) for item in repo.list_messages(conversation_id)],
             )
+
+    def delete(self, conversation_id: uuid.UUID) -> None:
+        with self._sessions() as session:
+            repo = AssistantRepository(session)
+            row = repo.get_conversation(conversation_id, for_update=True)
+            if row is None:
+                raise LookupError("对话不存在")
+            repo.delete_conversation(row)
+            session.commit()
 
     def send(self, conversation_id: uuid.UUID, content: str) -> AssistantTurnResult:
         question = content.strip()
@@ -89,12 +100,19 @@ class AssistantService:
                         facts, failed = outcome.facts, outcome.failed
                         answer_status = outcome.status
                 except Exception as exc:
+                    code = (
+                        "SUPERVISOR_PLAN_RETRY_FAILED" if isinstance(exc, SupervisorPlanningError)
+                        else "LLM_TIMEOUT" if isinstance(exc, LLMResponseError)
+                        else "DOMAIN_AGENT_FAILED"
+                    )
                     self._trace.finish_step(step_id=step_id, started_clock=clock,
-                                            status="FAILED", error=str(exc)[:500])
-                    self._trace.update_run_status(run_id, "FAILED", error=str(exc)[:500])
+                                            status="FAILED", error=code)
+                    self._trace.update_run_status(run_id, "FAILED", error=code)
                     raise
                 self._trace.finish_step(step_id=step_id, started_clock=clock,
-                                        status="SUCCEEDED", output_summary={"tool_names": tools})
+                                        status="SUCCEEDED", output_summary={
+                                            "tool_names": tools, "answer_status": answer_status,
+                                        })
                 self._trace.update_run_status(run_id, "SUCCEEDED")
             repo.add_message(conversation_id, "user", question)
             saved = repo.add_message(conversation_id, "assistant", answer,
@@ -114,6 +132,9 @@ class AssistantService:
         result = context.model_copy(deep=True)
         mentioned_subjects: set[str] = set()
         entities = extract_entities(question)
+        if entities.supplier_name:
+            result.current_supplier_name = entities.supplier_name
+            result.current_focus = "supplier"
         for value in (*entities.products, *entities.parts, *filter(None, (
             entities.supplier_code, entities.purchase_order,
             entities.production_order, entities.sales_order,
@@ -149,7 +170,7 @@ class AssistantService:
 
     @staticmethod
     def _ambiguous_reference(question: str, context: AssistantContext) -> bool:
-        if "其中" in question and not context.current_product:
+        if "其中" in question and not (context.current_product or context.last_result_entities):
             return True
         if not any(word in question for word in ("它", "该零件", "这个零件", "这个产品", "这个供应商")):
             return False
@@ -159,9 +180,11 @@ class AssistantService:
         if "这个产品" in question:
             return context.current_product is None
         if "这个供应商" in question:
-            return context.current_focus != "supplier"
+            return context.current_focus != "supplier" or not (
+                context.current_supplier_code or context.current_supplier_name
+            )
         if "这个零件" in question or any(
-            word in question for word in ("替代料", "库存", "被哪些产品使用")
+            word in question for word in ("替代料", "替代关系", "库存", "被哪些产品使用")
         ):
             return context.current_focus != "part"
         return context.current_focus is None
@@ -170,14 +193,16 @@ class AssistantService:
     def _suggest(
         question: str, context: AssistantContext, facts: list[ToolFact], failed: bool,
     ) -> WorkflowSuggestion | None:
-        if failed:
-            return None
         entities = extract_entities(question)
         known_part = entities.parts[0] if len(entities.parts) == 1 else context.current_part
         if (known_part and context.current_revision
                 and any(word in question.upper() for word in ("停产", "EOL", "断供", "LAST TIME BUY"))
-                and any(fact.name == "get_supplier_parts" and isinstance(fact.data, list)
-                        and fact.data and fact.arguments.get("part_number") == known_part
+                and any(fact.name in {"get_supplier_parts", "find_where_used",
+                                          "get_production_requirements"}
+                        and isinstance(fact.data, (list, dict))
+                        and (fact.data if isinstance(fact.data, list) else
+                             fact.data.get("products") or fact.data.get("rows"))
+                        and fact.arguments.get("part_number") == known_part
                         for fact in facts)):
             return WorkflowSuggestion(
                 workflow="supplier_eol", label="发起供应商停产分析",
@@ -188,7 +213,7 @@ class AssistantService:
                 }.items() if v},
             )
         pair = substitution_pair(question)
-        if (pair and any(word in question for word in ("评估", "替代", "替换"))
+        if (not failed and pair and any(word in question for word in ("评估", "替代", "替换"))
                 and any(fact.name == "get_alternatives" and isinstance(fact.data, dict)
                         and any(row.get("alternative_part_number") == pair[1]
                                 for row in fact.data.get("rows", []))

@@ -13,6 +13,7 @@ import type {
 } from "./assistantTypes";
 import type { MaterialSubstitutionRequest, MaterialSubstitutionResult } from "./materialTypes";
 import type { AgentRunDetail, AgentRunSummary } from "./observabilityTypes";
+import { supplierSearchValue } from "./supplierSearch";
 
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"
@@ -22,6 +23,12 @@ const DATA_PATH = "/api/v1/data";
 const ASSISTANT_PATH = "/api/v1/assistant/conversations";
 const MATERIAL_PATH = "/api/v1/workflows/material-substitution";
 const AGENT_RUNS_PATH = "/api/v1/agent-runs";
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -45,8 +52,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       : Array.isArray(detail)
       ? detail.map((item) => item.msg).join("; ")
       : detail || `请求失败（HTTP ${response.status}）`;
-    throw new Error(message);
+    throw new ApiError(message, response.status);
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -61,7 +69,7 @@ export const dataApi = {
     request<SupplierRow[]>(`${DATA_PATH}/suppliers${query({ search })}`),
   supplierParts: (supplier = "", partNumber = "") =>
     request<SupplierPartRow[]>(
-      `${DATA_PATH}/supplier-parts${query({ supplier, part_number: partNumber })}`,
+      `${DATA_PATH}/supplier-parts${query({ supplier: supplierSearchValue(supplier), part_number: partNumber })}`,
     ),
   inventory: (partNumber = "") =>
     request<InventoryRow[]>(`${DATA_PATH}/inventory${query({ part_number: partNumber })}`),
@@ -82,6 +90,9 @@ export const assistantApi = {
   }),
   list: () => request<ConversationSummary[]>(ASSISTANT_PATH),
   get: (id: string) => request<ConversationDetail>(`${ASSISTANT_PATH}/${encodeURIComponent(id)}`),
+  remove: (id: string) => request<void>(`${ASSISTANT_PATH}/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }),
   send: (id: string, content: string) => request<AssistantTurnResult>(
     `${ASSISTANT_PATH}/${encodeURIComponent(id)}/messages`,
     { method: "POST", body: JSON.stringify({ content }) },

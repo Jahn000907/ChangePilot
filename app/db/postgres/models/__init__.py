@@ -38,9 +38,9 @@ from app.db.postgres.models.erp import (
 __all__ = [
     "AgentRun",
     "AgentStep",
+    "ApprovalRecord",
     "AssistantConversation",
     "AssistantMessage",
-    "ApprovalRecord",
     "AuditEvent",
     "BOMRedline",
     "BOMRedlineLine",

@@ -29,8 +29,10 @@ class AssistantBenchmarkCase(BaseModel):
     category: str
     question: str
     expected_tools: list[str] = Field(default_factory=list)
+    allowed_tools: list[str] = Field(default_factory=list)
     forbidden_tools: list[str] = Field(default_factory=list)
     expected_agents: list[str] = Field(default_factory=list)
+    allowed_agents: list[str] = Field(default_factory=list)
     forbidden_agents: list[str] = Field(default_factory=list)
     should_use_supervisor: bool = False
     expected_facts: dict[str, str | int | float] = Field(default_factory=dict)
@@ -54,6 +56,9 @@ class CaseEvaluation(BaseModel):
     answer_preview: str
     evidence_preview: str = ""
     error_type: str | None = None
+    direct_grounded_facts: list[str] = Field(default_factory=list)
+    derived_grounded_facts: list[str] = Field(default_factory=list)
+    unsupported_facts: list[str] = Field(default_factory=list)
 
 
 def load_cases(path: Path = DATASET_PATH) -> list[AssistantBenchmarkCase]:
@@ -77,13 +82,61 @@ def _evidence(facts: list[ToolFact], question: str) -> str:
     return " ".join(fragments)
 
 
-def _unsupported(answer: str, evidence: str, *, check_numbers: bool = True) -> list[str]:
+def _decimal(value: object) -> Decimal | None:
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _derived_numbers(facts: list[ToolFact]) -> set[Decimal]:
+    """Only arithmetic/counts over known Tool row types, never arbitrary number combinations."""
+    derived: set[Decimal] = set()
+    for fact in facts:
+        data = fact.data
+        if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
+            continue
+        rows = [row for row in data["rows"] if isinstance(row, dict)]
+        if fact.name == "get_inventory":
+            for row in rows:
+                on_hand = _decimal(row.get("qty_on_hand"))
+                reserved = _decimal(row.get("qty_reserved"))
+                if on_hand is not None and reserved is not None:
+                    derived.add(on_hand - reserved)
+        elif fact.name == "get_purchase_orders":
+            ordered = [_decimal(row.get("ordered_qty")) for row in rows]
+            received = [_decimal(row.get("received_qty")) for row in rows]
+            if rows and all(value is not None for value in [*ordered, *received]):
+                ordered_total = sum(ordered, Decimal(0))
+                received_total = sum(received, Decimal(0))
+                derived.update({Decimal(len(rows)), ordered_total, received_total,
+                                ordered_total - received_total})
+        elif fact.name == "get_production_requirements":
+            active = [row for row in rows if row.get("order_status") not in {"COMPLETED", "CANCELLED"}]
+            quantities = [_decimal(row.get("required_qty")) for row in active]
+            if rows:
+                derived.update({Decimal(len(rows)), Decimal(len(active))})
+            if active and all(value is not None for value in quantities):
+                derived.add(sum(quantities, Decimal(0)))
+                if all(row.get("order_number") for row in active):
+                    derived.add(Decimal(len({row["order_number"] for row in active})))
+        elif fact.name == "get_sales_orders_for_products" and rows:
+            derived.add(Decimal(len(rows)))
+            if all(row.get("order_number") for row in rows):
+                derived.add(Decimal(len({row["order_number"] for row in rows})))
+    return derived
+
+
+def _grounding_claims(
+    answer: str, evidence: str, facts: list[ToolFact], *, check_numbers: bool = True,
+) -> tuple[list[str], list[str], list[str]]:
     # Exclude Markdown enumerator numbers, not business quantities.
     prose = re.sub(r"(?m)^\s*\d+[.)、]\s*", "", answer)
     # Enterprise identifiers carry digits; hyphenated generic terms such as
     # "Where-Used" are not claims about a concrete company record.
     codes = {code.upper() for code in _CODE.findall(prose) if any(char.isdigit() for char in code)}
-    unsupported = {code for code in codes if code not in evidence.upper()}
+    direct = {code for code in codes if code in evidence.upper()}
+    unsupported = codes - direct
     known_numbers = set(_NUMBER.findall(evidence))
     known_decimals: set[Decimal] = set()
     for item in known_numbers:
@@ -91,13 +144,17 @@ def _unsupported(answer: str, evidence: str, *, check_numbers: bool = True) -> l
             known_decimals.add(Decimal(item))
         except InvalidOperation:
             pass
+    derived_values = _derived_numbers(facts)
+    derived: set[str] = set()
     for item in _NUMBER.findall(prose) if check_numbers else []:
-        try:
-            if Decimal(item) not in known_decimals:
-                unsupported.add(item)
-        except InvalidOperation:
+        value = _decimal(item)
+        if value is not None and value in known_decimals:
+            direct.add(item)
+        elif value is not None and value in derived_values:
+            derived.add(item)
+        else:
             unsupported.add(item)
-    return sorted(unsupported)
+    return sorted(direct), sorted(derived), sorted(unsupported)
 
 
 def _same_value(left: object, right: object) -> bool:
@@ -129,19 +186,21 @@ def evaluate_case(
     tools = set(actual_tools) - {"get_part_revisions"}
     agents = set(actual_agents)
     required_tools, required_agents = set(case.expected_tools), set(case.expected_agents)
+    allowed_tools = set(case.allowed_tools)
+    allowed_agents = set(case.allowed_agents)
     missing_tools = required_tools - tools
-    extra_tools = (tools - required_tools) | (tools & set(case.forbidden_tools))
+    extra_tools = (tools - required_tools - allowed_tools) | (tools & set(case.forbidden_tools))
     missing_agents = required_agents - agents
-    extra_agents = (agents - required_agents) | (agents & set(case.forbidden_agents))
-    tool_score = (
-        len(required_tools & tools) / len(required_tools | tools)
-        if required_tools or tools else 1.0
-    )
-    precision = len(required_agents & agents) / len(agents) if agents else (1.0 if not required_agents else 0.0)
-    recall = len(required_agents & agents) / len(required_agents) if required_agents else (1.0 if not agents else 0.0)
-    exact = float(agents == required_agents and not extra_agents)
+    extra_agents = (agents - required_agents - allowed_agents) | (agents & set(case.forbidden_agents))
+    scored_tools = required_tools | (tools - allowed_tools)
+    tool_score = len(required_tools & tools) / len(scored_tools) if scored_tools else 1.0
+    precision = len((required_agents | allowed_agents) & agents) / len(agents) if agents else (1.0 if not required_agents else 0.0)
+    recall = len(required_agents & agents) / len(required_agents) if required_agents else 1.0
+    exact = float(not missing_agents and not extra_agents)
     evidence = _evidence(answer.facts, case.question)
-    unsupported = _unsupported(answer.text, evidence, check_numbers=case.category != "general")
+    direct, derived, unsupported = _grounding_claims(
+        answer.text, evidence, answer.facts, check_numbers=case.category != "general",
+    )
     expected_missing = [
         f"{key}={value}" for key, value in case.expected_facts.items()
         if not any(_has_expected_fact(fact.data, key, value) for fact in answer.facts)
@@ -181,4 +240,6 @@ def evaluate_case(
         actual_tools=actual_tools, actual_agents=actual_agents, actual_suggestion=suggestion,
         answer_status=answer.status, latency_ms=latency_ms, answer_preview=answer.text[:1000],
         evidence_preview=evidence[:4000],
+        direct_grounded_facts=direct, derived_grounded_facts=derived,
+        unsupported_facts=unsupported,
     )

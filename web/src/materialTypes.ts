@@ -1,4 +1,4 @@
-import type { ExecutionResult, HumanApproval, ReviewResult, StrategyCandidate } from "./types";
+import type { ApprovalRequest, ExecutionResult, HumanApproval, ReviewResult, StrategyCandidate } from "./types";
 
 export interface MaterialSubstitutionRequest {
   thread_id: string;
@@ -13,7 +13,7 @@ export interface MaterialSubstitutionRequest {
 
 export interface MaterialSubstitutionResult {
   thread_id: string;
-  status: "INTERRUPTED" | "COMPLETED";
+  status: "RUNNING" | "INTERRUPTED" | "COMPLETED" | "FAILED";
   state: {
     run_id: string;
     case_number: string | null;
@@ -28,8 +28,10 @@ export interface MaterialSubstitutionResult {
     } | null;
     strategies: StrategyCandidate[];
     review_result: ReviewResult | null;
+    review_count: number;
+    review_exhausted: boolean;
     approval: HumanApproval | null;
     execution_result: ExecutionResult | null;
   };
-  approval_request: unknown | null;
+  approval_request: ApprovalRequest | null;
 }

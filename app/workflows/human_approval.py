@@ -57,4 +57,9 @@ def _approval_request(state: SupplierEOLWorkflowState) -> HumanApprovalRequest:
         },
         strategies=state.strategies,
         review_result=state.review_result,
+        review_exhausted=state.review_exhausted,
+        human_intervention_reason=(
+            "自动策略修订已达到上限，当前评审仍存在问题，需要人工决定。"
+            if state.review_exhausted else None
+        ),
     )

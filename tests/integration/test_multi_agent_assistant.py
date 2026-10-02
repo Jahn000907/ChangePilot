@@ -22,6 +22,7 @@ from app.llm.client import DeepSeekLLMClient
 from app.main import create_app
 from app.services.assistant import AssistantService
 from app.services.trace import TraceService
+from app.tools.enterprise import SupplierPartsQuery
 from app.tools.langchain import get_enterprise_tools
 from app.tools.schemas import GetInventoryInput
 
@@ -119,10 +120,10 @@ def test_supervisor_dynamically_selects_domains_and_traces_tools() -> None:
         )
         for question, count in cases:
             result = service.send(conversation, question)
-            assert result.answer_status in {"SUCCESS", "TOOL_ERROR"}
+            assert result.answer_status in {"SUCCESS", "PARTIAL", "TOOL_ERROR"}
             assert len(llm.plans[-1]) == count
             assert "### 企业事实" in result.assistant_message.content
-            assert "### 综合判断" in result.assistant_message.content
+            assert "### 风险判断" in result.assistant_message.content
         assert llm.plans[1] == ["SupplyAgent", "StructureAgent"]
         with create_session() as session:
             runs = _run_ids() - before
@@ -209,7 +210,8 @@ def test_one_domain_tool_failure_keeps_partial_facts_and_unknowns() -> None:
     conversation = service.create().id
     try:
         result = service.send(conversation, "BRG-6204-A 的供应风险怎么样？")
-        assert result.answer_status == "TOOL_ERROR"
+        assert result.answer_status == "PARTIAL"
+        assert "部分领域查询失败" in result.assistant_message.content
         text = result.assistant_message.content
         assert "### 不确定项" in text and "get_inventory 查询失败" in text
         assert "### 企业事实" in text
@@ -219,6 +221,98 @@ def test_one_domain_tool_failure_keeps_partial_facts_and_unknowns() -> None:
             calls = list(session.scalars(select(ToolCall).where(ToolCall.run_id.in_(runs))))
         assert any(call.tool_name == "get_inventory" and call.status == "FAILED" for call in calls)
         assert any(call.status == "SUCCEEDED" for call in calls)
+        detail = TestClient(create_app()).get(f"/api/v1/agent-runs/{next(iter(runs))}").json()
+        assert detail["status"] == "SUCCEEDED"
+        assert detail["analysis_status"] == "PARTIAL"
+        assert "部分领域查询失败" in detail["error_summary"]
+    finally:
+        _cleanup([conversation], before)
+
+
+def test_e1_e2_use_scoped_evidence_and_business_summaries() -> None:
+    before = _run_ids()
+    service = _service(_SupervisorLLM())
+    conversation = service.create().id
+    try:
+        e1 = service.send(conversation, "结合 BRG-6204-A 的库存和采购情况分析供应风险")
+        assert e1.answer_status == "SUCCESS"
+        text = e1.assistant_message.content
+        assert "可用库存 700" in text
+        assert "未收 900" in text
+        assert "SUP-001 MotionWorks" in text and "末次采购" in text
+        assert "LAST_TIME_BUY" not in text
+        assert "| ---" not in text
+        e2 = service.send(conversation, "综合分析 BRG-6204-A 停产会对公司造成哪些影响？")
+        assert e2.answer_status == "SUCCESS"
+        text = e2.assistant_message.content
+        assert "影响 4 个成品" in text
+        assert "9 个活动生产订单" in text and "有效需求 322" in text
+        assert "销售订单" in text and "| ---" not in text
+        assert all(value not in text for value in ("CONFIRMED", "PARTIALLY_DELIVERED"))
+        assert e2.workflow_suggestion is not None
+        assert e2.workflow_suggestion.workflow == "supplier_eol"
+        with create_session() as session:
+            calls = list(session.scalars(select(ToolCall).where(ToolCall.run_id.in_(_run_ids() - before))))
+        names = [call.tool_name for call in calls]
+        assert "get_suppliers" not in names
+        assert "get_purchase_order_records" not in names
+        assert "get_sales_order_records" not in names
+        assert "get_bom_structure" not in names
+        assert "find_where_used" in names
+        assert "get_sales_orders_for_products" in names
+        sales = [call for call in calls if call.tool_name == "get_sales_orders_for_products"]
+        assert all(call.arguments.get("product_references") for call in sales)
+    finally:
+        _cleanup([conversation], before)
+
+
+def test_optional_supplier_lookup_failure_keeps_required_success() -> None:
+    before = _run_ids()
+
+    def fail_supplier(**kwargs: object) -> str:
+        raise RuntimeError("synthetic optional failure")
+
+    tools = [tool for tool in get_enterprise_tools() if tool.name != "get_supplier_parts"]
+    tools.append(StructuredTool.from_function(
+        func=fail_supplier, name="get_supplier_parts", description="test failure",
+        args_schema=SupplierPartsQuery,
+    ))
+    service = _service(_SupervisorLLM(), tools)
+    conversation = service.create().id
+    try:
+        result = service.send(conversation, "结合 BRG-6204-A 的库存和采购情况分析供应风险")
+        assert result.answer_status == "SUCCESS"
+        assert "可用库存 700" in result.assistant_message.content
+        assert "未收 900" in result.assistant_message.content
+        assert "部分领域查询失败" not in result.assistant_message.content
+        with create_session() as session:
+            calls = list(session.scalars(select(ToolCall).where(ToolCall.run_id.in_(_run_ids() - before))))
+        assert any(call.tool_name == "get_supplier_parts" and call.status == "FAILED" for call in calls)
+    finally:
+        _cleanup([conversation], before)
+
+
+def test_supervisor_synthesis_failure_preserves_verified_facts() -> None:
+    class BrokenSynthesis(_SupervisorLLM):
+        def generate_json(self, *, system_prompt: str, user_prompt: str) -> str:
+            if "跨域/综合" in system_prompt:
+                return super().generate_json(system_prompt=system_prompt, user_prompt=user_prompt)
+            return "not-json"
+
+    before = _run_ids()
+    service = _service(BrokenSynthesis())
+    conversation = service.create().id
+    try:
+        result = service.send(conversation, "结合 BRG-6204-A 的库存和采购情况分析供应风险")
+        assert result.answer_status == "PARTIAL"
+        assert "### 企业事实" in result.assistant_message.content
+        assert "部分领域查询失败" in result.assistant_message.content
+        run_id = next(iter(_run_ids() - before))
+        detail = TestClient(create_app()).get(f"/api/v1/agent-runs/{run_id}").json()
+        assert detail["analysis_status"] == "PARTIAL"
+        assert any(step["node_name"] == "supervisor_summary" and
+                   "SUPERVISOR_SYNTHESIS_FAILED" in step["summary"]
+                   for step in detail["steps"])
     finally:
         _cleanup([conversation], before)
 
@@ -261,3 +355,45 @@ def test_real_deepseek_supervisor_selects_domains() -> None:
         assert "DeliveryAgent" not in names
     finally:
         _cleanup([conversation], before)
+
+
+@pytest.mark.skipif(
+    os.getenv("CHANGEPILOT_REAL_E1_E2_SMOKE") != "1",
+    reason="explicit repeated real DeepSeek smoke only",
+)
+def test_real_deepseek_e1_e2_repeated() -> None:
+    before = _run_ids()
+    trace = TraceService()
+    service = AssistantService(trace_service=trace, assistant=EnterpriseAssistant(
+        llm_client=DeepSeekLLMClient(), trace_service=trace,
+    ))
+    conversations: list[uuid.UUID] = []
+    observations: list[tuple[str, str, list[str], list[str]]] = []
+    try:
+        for label, question in (
+            ("E1", "结合 BRG-6204-A 的库存和采购情况分析供应风险"),
+            ("E1", "结合 BRG-6204-A 的库存和采购情况分析供应风险"),
+            ("E2", "综合分析 BRG-6204-A 停产会对公司造成哪些影响？"),
+            ("E2", "综合分析 BRG-6204-A 停产会对公司造成哪些影响？"),
+        ):
+            conversation = service.create().id
+            conversations.append(conversation)
+            prior = _run_ids()
+            result = service.send(conversation, question)
+            with create_session() as session:
+                new_runs = _run_ids() - prior
+                steps = list(session.scalars(select(AgentStep).where(AgentStep.run_id.in_(new_runs))))
+                calls = list(session.scalars(select(ToolCall).where(ToolCall.run_id.in_(new_runs))))
+            agents = [step.node_name for step in steps if step.node_name.endswith("Agent")]
+            failed = [call.tool_name for call in calls if call.status == "FAILED"]
+            observations.append((label, result.answer_status, agents, failed))
+            print(f"{label}: {result.answer_status}; agents={agents}; failed_tools={failed}")
+            assert result.answer_status in {"SUCCESS", "PARTIAL"}
+            assert "### 企业事实" in result.assistant_message.content
+            assert "| ---" not in result.assistant_message.content
+            assert not {"get_suppliers", "get_purchase_order_records", "get_sales_order_records"} & {
+                call.tool_name for call in calls
+            }
+        assert len(observations) == 4
+    finally:
+        _cleanup(conversations, before)

@@ -12,14 +12,13 @@ if TYPE_CHECKING:
     from app.workflows.state import SupplierEOLWorkflowState
 
 
-_SYSTEM_PROMPT = """You generate advisory engineering strategies for a Supplier EOL event.
-Use only the supplied facts. Never invent inventory, orders, BOM relationships, dates, or
-qualification status. Only alternatives classified ELIGIBLE may be treated as qualified;
-REQUIRES_REVIEW needs validation, and INELIGIBLE must not be presented as qualified. Return
-only one JSON object with a non-empty `strategies` array. Each item must contain:
-strategy_type, title, summary, rationale, actions, risks.
-strategy_type must be one of LAST_TIME_BUY, QUALIFIED_ALTERNATIVE, QUALIFICATION_REQUIRED,
-REDESIGN, SUPPLY_MITIGATION. Provide candidates, not a final approval decision."""
+_SYSTEM_PROMPT = """你为供应商停产事件生成候选工程处置策略。只使用提供的事实，不得编造库存、订单、BOM、日期或认证状态。
+Use only the supplied facts. This is a grounding rule; all user-visible strategy prose must remain in simplified Chinese.
+只有 ELIGIBLE 可视为已认证替代；REQUIRES_REVIEW 须验证，INELIGIBLE 不得当作已认证。
+仅返回一个含非空 strategies 数组的 JSON。每项包含 strategy_type、title、summary、rationale、actions、risks。
+strategy_type 只能是 LAST_TIME_BUY、QUALIFIED_ALTERNATIVE、QUALIFICATION_REQUIRED、REDESIGN、SUPPLY_MITIGATION。
+JSON 字段名和类型枚举保持英文；title、summary、rationale、actions、risks 必须使用简体中文，零件号、日期和技术缩写可保留英文。
+只提供候选方案，不代替人工批准。"""
 
 
 class StrategyAgent:

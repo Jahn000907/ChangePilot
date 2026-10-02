@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getSupplierEOLWorkflow,
@@ -19,6 +19,11 @@ import MaterialSubstitutionPanel from "./MaterialSubstitutionPanel";
 import AgentRunCenter from "./AgentRunCenter";
 import type { WorkflowSuggestion } from "./assistantTypes";
 import { businessDateShanghai, formatQuantity } from "./display";
+import { businessStatus } from "./businessDisplay";
+import {
+  canApproveWorkflow, clearWorkflowThread, readActiveWorkflowKind, readWorkflowThread,
+  recoverWorkflow, saveActiveWorkflowKind, saveWorkflowThread, workflowDisplayStatus,
+} from "./workflowRecovery";
 
 const strategyNames: Record<string, string> = {
   LAST_TIME_BUY: "最后采购", QUALIFIED_ALTERNATIVE: "已认证替代料",
@@ -57,10 +62,15 @@ export default function App() {
     () => window.location.hash === "#runs" ? "runs" :
       window.location.hash === "#data" ? "data" : "workbench",
   );
-  const [formalFlow, setFormalFlow] = useState<"supplier_eol" | "material_substitution">("supplier_eol");
+  const [formalFlow, setFormalFlow] = useState<"supplier_eol" | "material_substitution">(
+    readActiveWorkflowKind,
+  );
   const [materialPrefill, setMaterialPrefill] = useState<Record<string, string> | undefined>();
   const [form, setForm] = useState<StartWorkflowRequest>(goldenRequest);
   const [result, setResult] = useState<WorkflowResult | null>(null);
+  const [activeThread, setActiveThread] = useState<string | null>(() => readWorkflowThread("supplier_eol"));
+  const [manualThread, setManualThread] = useState("");
+  const [recovering, setRecovering] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState(0);
   const [reviewer, setReviewer] = useState("change.manager");
   const [comment, setComment] = useState("");
@@ -68,13 +78,38 @@ export default function App() {
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const threadId = readWorkflowThread("supplier_eol");
+    if (!threadId) return;
+    let active = true;
+    setRecovering(true);
+    void recoverWorkflow("supplier_eol", threadId, getSupplierEOLWorkflow, undefined, 2)
+      .then((recovered) => {
+        if (!active) return;
+        if (recovered.kind === "missing") {
+          setActiveThread(null);
+          setError("已保存的供应商停产流程不存在，已清除恢复入口。可新建或输入其他线程 ID。");
+        } else {
+          setResult(recovered.result);
+          setForm((previous) => ({ ...previous, thread_id: recovered.result.thread_id }));
+          setSelectedStrategy(recovered.result.state.approval?.selected_strategy_index ?? 0);
+          setActiveThread(recovered.result.thread_id);
+        }
+      })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? `流程恢复失败：${reason.message}。可重试，恢复入口仍已保留。` : "流程恢复失败，可重试。");
+      })
+      .finally(() => { if (active) setRecovering(false); });
+    return () => { active = false; };
+  }, []);
+
   const displayStatus = useMemo(() => {
-    if (!result) return "准备就绪";
-    if (result.status === "INTERRUPTED") return "待人工审批";
-    if (result.state.approval?.decision === "REJECT") return "已驳回";
-    if (result.state.execution_result) return "执行记录已创建";
-    return "已完成";
-  }, [result]);
+    if (!result) return recovering ? "正在恢复" : activeThread ? "等待恢复" : "准备就绪";
+    return workflowDisplayStatus(result);
+  }, [result, recovering, activeThread]);
+  const topbarStatus = view === "workbench"
+    ? formalFlow === "supplier_eol" ? displayStatus : "物料替代评估"
+    : "只读查看";
 
   function updateField<K extends keyof StartWorkflowRequest>(
     key: K,
@@ -89,7 +124,10 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      setResult(await action());
+      const updated = await action();
+      setResult(updated);
+      saveWorkflowThread("supplier_eol", updated.thread_id);
+      setActiveThread(updated.thread_id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "请求出现未知错误");
     } finally {
@@ -100,9 +138,45 @@ export default function App() {
 
   async function handleStart(event: FormEvent) {
     event.preventDefault();
+    saveWorkflowThread("supplier_eol", form.thread_id);
+    setActiveThread(form.thread_id);
     setSelectedStrategy(0);
     setComment("");
     await runAction(() => startSupplierEOLWorkflow(form));
+  }
+
+  async function restoreThread(thread: string) {
+    const threadId = thread.trim();
+    if (!threadId || busyRef.current) return;
+    busyRef.current = true;
+    setRecovering(true);
+    setError(null);
+    try {
+      const recovered = await recoverWorkflow("supplier_eol", threadId, getSupplierEOLWorkflow);
+      if (recovered.kind === "missing") {
+        if (activeThread === threadId) {
+          setActiveThread(null);
+          setResult(null);
+        }
+        setError("未找到该供应商停产流程，请核对线程 ID。");
+      } else {
+        setResult(recovered.result);
+        setActiveThread(recovered.result.thread_id);
+        setForm((previous) => ({ ...previous, thread_id: recovered.result.thread_id }));
+        setSelectedStrategy(recovered.result.state.approval?.selected_strategy_index ?? 0);
+        setManualThread("");
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? `流程恢复失败：${reason.message}。可重试。` : "流程恢复失败，可重试。");
+    } finally {
+      busyRef.current = false;
+      setRecovering(false);
+    }
+  }
+
+  function handleRestore(event: FormEvent) {
+    event.preventDefault();
+    void restoreThread(manualThread);
   }
 
   async function handleApproval(decision: "APPROVE" | "REJECT") {
@@ -118,6 +192,8 @@ export default function App() {
   }
 
   function resetDemo() {
+    clearWorkflowThread("supplier_eol");
+    setActiveThread(null);
     setForm(goldenRequest());
     setResult(null);
     setSelectedStrategy(0);
@@ -133,7 +209,10 @@ export default function App() {
   function followSuggestion(suggestion: WorkflowSuggestion) {
     setView("workbench");
     setFormalFlow(suggestion.workflow);
+    saveActiveWorkflowKind(suggestion.workflow);
     if (suggestion.workflow === "supplier_eol") {
+      clearWorkflowThread("supplier_eol");
+      setActiveThread(null);
       setForm((previous) => ({
         ...previous,
         part_number: suggestion.prefill.part_number || "",
@@ -147,6 +226,7 @@ export default function App() {
       }));
       setResult(null);
     } else {
+      clearWorkflowThread("material_substitution");
       setMaterialPrefill({ ...suggestion.prefill });
     }
     window.setTimeout(() => document.getElementById("formal-workflow")?.scrollIntoView({ behavior: "smooth" }), 100);
@@ -170,9 +250,9 @@ export default function App() {
           <button type="button" className={view === "runs" ? "active" : ""}
             onClick={() => changeView("runs")}>Agent 运行中心</button>
         </nav>
-        <div className={`status-pill status-${displayStatus.toLowerCase().replaceAll(" ", "-")}`}>
+        <div className={`status-pill status-${topbarStatus.toLowerCase().replaceAll(" ", "-")}`}>
           <span className="status-dot" />
-          {view === "workbench" ? displayStatus : "只读查看"}
+          {topbarStatus}
         </div>
       </header>
 
@@ -182,9 +262,9 @@ export default function App() {
         <div id="formal-workflow" className="formal-flow-tabs" aria-label="正式业务流程">
           <span>正式业务流程</span>
           <button type="button" className={formalFlow === "supplier_eol" ? "active" : ""}
-            onClick={() => setFormalFlow("supplier_eol")}>供应商停产分析</button>
+            onClick={() => { setFormalFlow("supplier_eol"); saveActiveWorkflowKind("supplier_eol"); }}>供应商停产分析</button>
           <button type="button" className={formalFlow === "material_substitution" ? "active" : ""}
-            onClick={() => setFormalFlow("material_substitution")}>物料替代评估</button>
+            onClick={() => { setFormalFlow("material_substitution"); saveActiveWorkflowKind("material_substitution"); }}>物料替代评估</button>
         </div>
         {formalFlow === "supplier_eol" ? <>
         <section className="hero">
@@ -224,15 +304,23 @@ export default function App() {
               <h3>供应商停产事件</h3>
               <p>已预填 Golden Scenario 示例数据，可直接启动演示。</p>
             </div>
-            {result && (
+            {activeThread && (
               <button className="button button-secondary" type="button" onClick={resetDemo}>
                 新建工作流
               </button>
             )}
           </div>
 
+          <form onSubmit={handleRestore} className="form-actions" aria-label="恢复已有供应商停产流程">
+            <label><span>已有线程 ID</span><input value={manualThread} onChange={(event) => setManualThread(event.target.value)} placeholder="输入已有 thread_id" required disabled={loading || recovering} /></label>
+            <button className="button button-secondary" type="submit" disabled={loading || recovering}>恢复流程</button>
+          </form>
+          {activeThread && !result && <div className="form-actions">
+            <span>当前线程：{activeThread} · 流程可能仍在执行，可刷新状态。</span>
+            <button className="button button-secondary" type="button" disabled={loading || recovering} onClick={() => void restoreThread(activeThread)}>刷新状态</button>
+          </div>}
           <form onSubmit={handleStart}>
-            <fieldset disabled={loading || result !== null}>
+            <fieldset disabled={loading || recovering || activeThread !== null || result !== null}>
               <div className="form-grid">
                 <label>
                   <span>供应商</span>
@@ -328,6 +416,8 @@ export default function App() {
           </form>
         </section>
 
+        {result?.status === "RUNNING" && <p className="panel">当前流程已启动，正在执行。可点击下方“刷新状态”获取最新进展。</p>}
+        {result?.status === "FAILED" && <p className="panel" role="alert">流程执行失败。可核对运行记录，或点击“新建工作流”重新发起；不会自动重试。</p>}
         {result && state && (
           <>
             <section className="panel status-panel">
@@ -352,6 +442,7 @@ export default function App() {
                 <Identity label="变更案例" value={state.case_number || state.case_id} />
                 <Identity label="工程变更请求 ECR" value={state.ecr_number || state.ecr_id} />
                 <Identity label="修订轮次" value={String(state.revision_count)} />
+                <Identity label="评审轮次" value={String(state.review_count)} />
               </div>
             </section>
 
@@ -368,16 +459,21 @@ export default function App() {
 
             {state.review_result && <ReviewPanel review={state.review_result} />}
 
-            {result.status === "INTERRUPTED" && result.approval_request && (
+            {canApproveWorkflow(result) && result.approval_request && (
               <section className="panel approval-panel">
                 <div className="panel-heading">
                   <div>
                     <span className="section-number">06</span>
                     <h3>人工审批</h3>
-                    <p>审批完成前不会创建执行记录。</p>
+                    <p>{result.approval_request.human_intervention_reason || "审批完成前不会创建执行记录。"}</p>
                   </div>
                   <span className="approval-badge">待处理</span>
                 </div>
+                {state.review_exhausted && (
+                  <p role="alert" className="assistant-error">
+                    当前评审仍为“需要修订”。批准表示人工接受上述评审风险并继续创建受控执行记录；驳回则不执行。
+                  </p>
+                )}
                 <div className="approval-grid">
                   <label>
                     <span>审批人</span>
@@ -427,7 +523,7 @@ export default function App() {
                     disabled={loading}
                     onClick={() => handleApproval("APPROVE")}
                   >
-                    {loading ? "正在提交…" : "批准所选策略"}
+                    {loading ? "正在提交…" : state.review_exhausted ? "知悉风险并批准所选策略" : "批准所选策略"}
                   </button>
                 </div>
               </section>
@@ -657,7 +753,7 @@ function ExecutionPanel({ execution }: { execution: ExecutionResult }) {
           <h3>工程变更执行记录已创建</h3>
           <p>{execution.summary}</p>
         </div>
-        <span className="execution-status">{execution.status === "PENDING" ? "待执行" : execution.status}</span>
+        <span className="execution-status">{businessStatus(execution.status)}</span>
       </div>
       <div className="identity-grid">
         <Identity label="策略 ID" value={execution.strategy_id} />

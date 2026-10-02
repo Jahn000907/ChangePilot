@@ -64,9 +64,13 @@ class FindWhereUsedInput(_EffectiveStructureInput):
     """Input for finding effective parent assemblies and products."""
 
 
-class GetInventoryInput(_PartRevisionInput):
+class GetInventoryInput(BaseModel):
     """Input for retrieving inventory facts, optionally by location."""
 
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    part_number: str = Field(min_length=1, max_length=64)
+    revision_code: str | None = Field(default=None, min_length=1, max_length=16)
     plant_code: str | None = Field(default=None, min_length=1, max_length=20)
     warehouse_code: str | None = Field(default=None, min_length=1, max_length=20)
 

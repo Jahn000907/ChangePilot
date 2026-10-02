@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { dataApi } from "./api";
+import { businessStatus as status } from "./businessDisplay";
 import { formatQuantity, formatShanghaiTime } from "./display";
 import type {
   DataSummary, InventoryRow, ProductionOrderDetail, ProductionOrderRow,
@@ -24,15 +25,6 @@ const sections: { id: Section; label: string; group: string }[] = [
   { id: "sales", label: "销售订单", group: "销售" },
 ];
 
-const statusNames: Record<string, string> = {
-  ACTIVE: "正常", BLOCKED: "已冻结", PHASE_OUT: "逐步退出",
-  LAST_TIME_BUY: "最后采购期", EOL: "已停产", QUALIFIED: "已认证",
-  CONDITIONAL: "有条件认证", UNQUALIFIED: "未认证", DRAFT: "草稿",
-  OPEN: "进行中", PARTIALLY_RECEIVED: "部分收货", COMPLETED: "已完成",
-  CANCELLED: "已取消", PLANNED: "已计划", RELEASED: "已下达",
-  IN_PROGRESS: "生产中", CONFIRMED: "已确认", PARTIALLY_DELIVERED: "部分交付",
-};
-const status = (value: string) => statusNames[value] || value;
 const date = (value: string | null) => value ? value.slice(0, 10) : "—";
 
 function DataTable<T>({ rows, columns, onRow }: {

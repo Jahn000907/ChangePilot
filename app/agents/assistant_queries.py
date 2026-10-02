@@ -25,6 +25,7 @@ class QueryEntities:
     products: tuple[str, ...] = ()
     parts: tuple[str, ...] = ()
     supplier_code: str | None = None
+    supplier_name: str | None = None
     purchase_order: str | None = None
     production_order: str | None = None
     sales_order: str | None = None
@@ -51,10 +52,17 @@ def extract_entities(question: str) -> QueryEntities:
             production = value
         elif prefix == "SO":
             sales = value
+        elif prefix not in {"ECO", "ECR", "WHERE", "LAST"}:
+            # A syntactically valid candidate is an identity, even if absent from ERP.
+            parts.append(value)
     revision_match = REVISION.search(question)
     iso_match = ISO_DATE.search(question)
     cn_match = CN_DATE.search(question)
     business_date = None
+    supplier_name_match = re.search(
+        r"\b([A-Za-z][A-Za-z0-9&._-]{2,})\s*(?:供应哪些零件|的供应关系|供应的零件)",
+        question,
+    )
     if iso_match:
         business_date = date.fromisoformat(iso_match.group(1))
     elif cn_match:
@@ -63,6 +71,7 @@ def extract_entities(question: str) -> QueryEntities:
         products=tuple(dict.fromkeys(products)),
         parts=tuple(dict.fromkeys(parts)),
         supplier_code=supplier,
+        supplier_name=supplier_name_match.group(1) if supplier_name_match else None,
         purchase_order=purchase,
         production_order=production,
         sales_order=sales,
@@ -76,7 +85,7 @@ def clear_intent(question: str, entities: QueryEntities, context: AssistantConte
     if any(word in question for word in ("综合分析", "供应风险", "无法供应", "结合库存", "结合采购")):
         return None
     if any(word in question for word in ("什么是", "通常", "一般", "改写", "翻译")) and not (
-        entities.parts or entities.products or entities.supplier_code
+        entities.parts or entities.products or entities.supplier_code or entities.supplier_name
         or entities.purchase_order or entities.production_order or entities.sales_order
     ) and not any(word in question for word in ("它", "这个产品", "这个零件", "其中")):
         return None
@@ -90,8 +99,8 @@ def clear_intent(question: str, entities: QueryEntities, context: AssistantConte
         return "get_production_order_records"
     if entities.sales_order or (context.current_sales_order and "销售订单" in question):
         return "get_sales_order_records"
-    if (entities.supplier_code or context.current_supplier_code) and any(
-        word in question for word in ("供应哪些零件", "供应的零件", "供应物料")
+    if (entities.supplier_code or entities.supplier_name or context.current_supplier_code or context.current_supplier_name) and any(
+        word in question for word in ("供应哪些零件", "供应的零件", "供应物料", "供应关系")
     ):
         return "get_supplier_parts"
     if entities.supplier_code and any(word in question for word in ("供应商", "是谁", "信息")):
@@ -106,9 +115,9 @@ def clear_intent(question: str, entities: QueryEntities, context: AssistantConte
         word in question.upper() for word in ("停产", "EOL", "断供", "LAST TIME BUY")
     ):
         return "get_supplier_parts"
-    if "替代料" in question and not any(word in question for word in ("评估", "切换", "替换为")):
-        return "get_alternatives"
-    if "已认证" in question and (entities.parts or context.current_part):
+    if any(word in question for word in ("替代料", "替代关系", "已认证", "未认证")) and not any(
+        word in question for word in ("评估", "切换", "替换为")
+    ):
         return "get_alternatives"
     if "库存" in question and not any(word in question for word in ("影响", "评估")):
         return "get_inventory"

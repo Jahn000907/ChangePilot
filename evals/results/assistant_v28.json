@@ -1,25 +1,25 @@
 {
   "benchmark": "ChangePilot-V2.8-Core",
-  "timestamp_utc": "2026-09-28T12:02:27.754796+00:00",
-  "mode": "fake",
-  "model": "controlled-fake",
-  "git_commit": "9fda8b4",
-  "langsmith_project": null,
-  "case_count": 13,
-  "passed": 12,
+  "timestamp_utc": "2026-10-02T09:05:27.551417+00:00",
+  "mode": "real",
+  "model": "deepseek-chat",
+  "git_commit": "3d19cc8",
+  "langsmith_project": "ChangePilot-V2",
+  "case_count": 8,
+  "passed": 7,
   "failed": 1,
   "metrics": {
-    "tool_selection_accuracy": 1.0,
+    "tool_selection_accuracy": 0.938,
     "agent_selection_precision": 1.0,
-    "agent_selection_recall": 1.0,
-    "agent_selection_exact": 1.0,
+    "agent_selection_recall": 0.938,
+    "agent_selection_exact": 0.875,
     "supervisor_routing_accuracy": 1.0,
-    "fact_grounding_rate": 1.0,
-    "unsupported_fact_rate": 0.0,
+    "fact_grounding_rate": 0.975,
+    "unsupported_fact_rate": 0.025,
     "workflow_suggestion_accuracy": 1.0,
-    "task_completion_rate": 0.923
+    "task_completion_rate": 0.875
   },
-  "average_latency_ms": 73.9,
+  "average_latency_ms": 1300.8,
   "cases": [
     {
       "case_id": "general_bom",
@@ -40,9 +40,9 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 7,
-      "answer_preview": "这是通用概念问题；BOM 是物料清单，ECR 是变更请求，ECO 是变更订单。",
-      "evidence_preview": "什么是 BOM？ ",
+      "latency_ms": 2739,
+      "answer_preview": "BOM（Bill of Materials，物料清单）是描述一个产品由哪些零部件组成、以及每个零部件用量的结构化清单。可以把它理解成产品的“配方”或“装配说明书”。\n\n几个关键点：\n\n- **层级结构**：BOM 通常是多层的。成品由若干组件构成，组件又由更小的零件构成，形成父子层级关系。\n- **用量（Quantity per）**：每个父件下，每个子件需要多少数量，是 BOM 的核心信息之一。\n- **版本（Revision）**：同一产品可能有不同版本，不同版本对应的 BOM 可能不同，所以查 BOM 时要指定版本和生效日期。\n- **用途**：BOM 是生产、采购、成本核算、物料需求计划（MRP）的基础。它决定了“要造一个产品，需要备哪些料、备多少”。\n\n与之相关的两个概念：\n- **Where-Used（反查/用途清单）**：反过来问“某个零件被哪些产品/组件用到”，是 BOM 的反向查询。\n- **替代料**：当某个零件缺货或停产时，BOM 上可能允许用其他已认证的零件替代。\n\n如果你需要查询本企业某个具体产品版本的 BOM 明细，告诉我产品编号和版本，我可以帮你调取真实数据。",
+      "evidence_preview": "什么是 BOM？",
       "error_type": null
     },
     {
@@ -64,9 +64,9 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 6,
-      "answer_preview": "这是通用概念问题；BOM 是物料清单，ECR 是变更请求，ECO 是变更订单。",
-      "evidence_preview": "ECO 和 ECR 有什么区别？ ",
+      "latency_ms": 3234,
+      "answer_preview": "ECO（Engineering Change Order，工程变更指令）和 ECR（Engineering Change Request，工程变更申请）是工程变更管理里两个不同阶段的单据，核心区别在于**“提议”还是“执行”**：\n\n**ECR —— 工程变更申请**\n- 性质：**发起/提议**。任何人（设计、工艺、质量、采购、生产等）发现问题或改进机会时提出。\n- 目的：说明“为什么要改”，比如设计缺陷、成本优化、供应商停产、法规要求、客户投诉等。\n- 内容：问题描述、变更理由、初步影响范围、期望目标。\n- 结果：经过评审后，可能被**批准、驳回或搁置**。批准后才会转入 ECO。\n- 特点：此时变更**尚未确定**，只是“我想改”。\n\n**ECO —— 工程变更指令**\n- 性质：**批准/执行**。ECR 通过评审后，由工程部门正式下达。\n- 目的：说明“具体怎么改、改哪些、什么时候生效”。\n- 内容：明确的变更对象（零件号/版本）、新旧版本、生效日期、BOM/图纸/工艺文件的更新、库存与在制/在途处理方式、切换方案等。\n- 结果：**授权执行**，驱动下游系统（BOM、采购、生产、销售）同步更新。\n- 特点：此时变更**已确定并要落地**。\n\n**一句话对比**\n\n| 维度 | ECR | ECO |\n|---|---|---|\n| 阶段 | 变更前（提议） | 变更后（执行） |\n| 回答的问题 | 要不要改、为什么改 | 怎么改、改什么、何时生效 |\n| 是否已批准 | 未定 | 已批准 |\n| 是否驱动执行 | 否 | 是 |\n\n**流程关系**：ECR → 评审/批准 → ECO → 执行与验证 → 关闭。\n\n补充一点实务提醒：不同企业（尤其汽车、航空、电子行业）对这两个缩写的定义和叫法可能略有差异，有的公司把 ECR 叫“变更请求”、ECO 叫“变更通知（ECN）”，具体以贵司的变更管理程序文件为准。\n\n如果你有具体的变更单号或零件，我可以帮你查一下它在系统里的实际状态和影响范围。",
+      "evidence_preview": "ECO 和 ECR 有什么区别？",
       "error_type": null
     },
     {
@@ -91,7 +91,7 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 277,
+      "latency_ms": 104,
       "answer_preview": "BRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。",
       "evidence_preview": "BRG-6204-A 当前库存是多少？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"plant_code\": null, \"warehouse_code\": null, \"rows\": [{\"plant_code\": \"CN-E01\", \"warehouse_code\": \"WH-01\", \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"qty_on_hand\": \"820.0000\", \"qty_reserved\": \"120.0000\", \"unit_cost\": \"12.5000\", \"currency\": \"CNY\", \"updated_at\": \"2026-09-01T00:00:00Z\"}]} BRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。",
       "error_type": null
@@ -112,13 +112,13 @@
       },
       "issues": [],
       "actual_tools": [
-        "get_part_revisions",
-        "get_alternatives"
+        "get_alternatives",
+        "get_part_revisions"
       ],
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 47,
+      "latency_ms": 34,
       "answer_preview": "BRG-6204-A 的替代料：\n\n| 替代零件号 | 替代版本 | 资格状态 |\n| --- | --- | --- |\n| BRG-6204-B | A | 已认证 |\n| BRG-6204-C | A | 未认证 |",
       "evidence_preview": "BRG-6204-A 有哪些替代料？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"alternative_part_number\": \"BRG-6204-B\", \"alternative_revision_code\": \"A\", \"qualification_status\": \"QUALIFIED\", \"replacement_type\": \"DIRECT\", \"verified_at\": \"2026-09-01T00:00:00Z\", \"verified_by\": \"quality.engineer\", \"alternative_id\": \"8ffbabe3-5772-5a85-86f0-19a284f958bd\"}, {\"alternative_part_number\": \"BRG-6204-C\", \"alternative_revision_code\": \"A\", \"qualification_status\": \"UNQUALIFIED\", \"replacement_type\": \"CONDITIONAL\", \"verified_at\": \"2026-09-01T00:00:00Z\", \"verified_by\": \"quality.engineer\", \"alternative_id\": \"3f62c197-23e0-573a-b5fd-ece351e5d847\"}]} BRG-6204-A 的替代料：\n\n| 替代零件号 | 替代版本 | 资格状态 |\n| --- | --- | --- |\n| BRG-6204-B | A | 已认证 |\n| BRG-6204-C | A | 未认证 |",
       "error_type": null
@@ -145,9 +145,9 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 61,
+      "latency_ms": 43,
       "answer_preview": "当前有效产品结构中，BRG-6204-A 被以下产品使用：CON-C100、PAL-P300、ROB-P100、ROB-P200。",
-      "evidence_preview": "BRG-6204-A 被哪些产品使用？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"as_of_date\": \"2026-09-28\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"255af5cd-ee12-5773-91a1-c649d20fba1b\", \"bom_code\": \"BOM-ASM-GEARBOX100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9e5af054-50ea-56fe-bcda-4bc19d4760da\", \"bom_code\": \"BOM-ASM-GEARBOX200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"06712d3a-4cee-5f29-846f-81a149d24610\", \"bom_code\": \"BOM-ASM-GEARBOX300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX400\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9bb16fc4-4467-5d4e-b4d9-ca61ffc27e20\", \"bom_code\": \"BOM-ASM-GEARBOX400-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-CONV100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"05ea13b7-c4e5-5d7a-a661-7cf71844e156\", \"bom_code\": \"BOM-ASM-CONV100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"832b85b4-9b0f-54e7-b97d-e02e2a241cf1\", \"bom_code\": \"BOM-ASM-JOINT100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"d9b05feb-ae63-59f3-a78f-7de36b38a5a9\", \"bom_code\": \"BOM-ASM-JOINT200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-PAL100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"5be5a8bc-7b68-5640-bc69-891087e02d85\", \"bom_code\": \"BOM-ASM-PAL100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_code\": \"BOM-ASM-ARM100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"062a8c23-a9e2-503b-a629-d05b060bad50\", \"bom_code\": \"BOM-ASM-ARM200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\", \"ASM-ARM200\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"CON-C100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"19d48b4b-aafa-51e3-a8fe-03b4b5bbdc1a\", \"bom_code\": \"BOM-CON-C100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\", \"CON-C100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"PAL-P300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"828dbb31-3cc2-528b-a189-768a0e8c8742\", \"bom_code\": \"BOM-PAL-P300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\", \"PAL-P300\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_code\": \"BOM-ROB-P100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\", \"ROB-P100\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"6aecb39d-af98-55c1-95eb-4ce4246c4908\", \"bom_code\": \"BOM-ROB-P200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\", \"",
+      "evidence_preview": "BRG-6204-A 被哪些产品使用？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"as_of_date\": \"2026-10-02\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"255af5cd-ee12-5773-91a1-c649d20fba1b\", \"bom_code\": \"BOM-ASM-GEARBOX100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9e5af054-50ea-56fe-bcda-4bc19d4760da\", \"bom_code\": \"BOM-ASM-GEARBOX200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"06712d3a-4cee-5f29-846f-81a149d24610\", \"bom_code\": \"BOM-ASM-GEARBOX300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX400\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9bb16fc4-4467-5d4e-b4d9-ca61ffc27e20\", \"bom_code\": \"BOM-ASM-GEARBOX400-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-CONV100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"05ea13b7-c4e5-5d7a-a661-7cf71844e156\", \"bom_code\": \"BOM-ASM-CONV100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"832b85b4-9b0f-54e7-b97d-e02e2a241cf1\", \"bom_code\": \"BOM-ASM-JOINT100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"d9b05feb-ae63-59f3-a78f-7de36b38a5a9\", \"bom_code\": \"BOM-ASM-JOINT200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-PAL100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"5be5a8bc-7b68-5640-bc69-891087e02d85\", \"bom_code\": \"BOM-ASM-PAL100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_code\": \"BOM-ASM-ARM100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"062a8c23-a9e2-503b-a629-d05b060bad50\", \"bom_code\": \"BOM-ASM-ARM200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\", \"ASM-ARM200\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"CON-C100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"19d48b4b-aafa-51e3-a8fe-03b4b5bbdc1a\", \"bom_code\": \"BOM-CON-C100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\", \"CON-C100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"PAL-P300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"828dbb31-3cc2-528b-a189-768a0e8c8742\", \"bom_code\": \"BOM-PAL-P300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\", \"PAL-P300\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_code\": \"BOM-ROB-P100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\", \"ROB-P100\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"6aecb39d-af98-55c1-95eb-4ce4246c4908\", \"bom_code\": \"BOM-ROB-P200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\", \"",
       "error_type": null
     },
     {
@@ -172,9 +172,9 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 56,
-      "answer_preview": "ROB-P100 在 2026-09-28 的有效 BOM（每件产品用量）：\n\n| 零件号 | 版本 | 需求数量 |\n| --- | --- | --- |\n| CABLE-C100 | A | 4 |\n| FRAME-F100 | A | 2 |\n| ASM-CTRL100 | A | 1 |\n| ASM-ARM100 | A | 1 |\n| FAN-FAN100 | A | 1 |\n| ENCLOSURE-EN100 | A | 1 |\n| SENSOR-S100 | A | 6 |\n| PLC-C100 | A | 1 |\n| FILTER-FL100 | A | 1 |\n| CABLE-C200 | A | 1 |\n| ASM-JOINT100 | A | 3 |\n| ASM-GEARBOX100 | A | 3 |\n| MOTOR-SM100 | A | 3 |\n| ENCODER-E100 | A | 3 |\n| SHAFT-S100 | A | 6 |\n| SCREW-SC100 | A | 24 |\n| SEAL-O100 | A | 6 |\n| BRG-6204-A | A | 6 |\n| GEAR-G100 | A | 9 |",
-      "evidence_preview": "ROB-P100 需要哪些零件？ {\"part_number\": \"ROB-P100\", \"revision_code\": \"A\", \"as_of_date\": \"2026-09-28\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_code\": \"BOM-ROB-P100-01\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-ARM100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"0f3634ea-8a15-5c69-9e13-166bec12c190\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-CTRL100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"218d964c-8e80-5e06-8953-7e00d9a7313f\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"FRAME-F100\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"bf7669ff-ef0a-5109-ad0f-5947ad4fddf8\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C100\", \"component_revision_code\": \"A\", \"line_number\": 4, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"b20e7838-df36-58c4-85a7-f42c93bb6f09\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-JOINT100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"3.0\", \"cumulative_quantity\": \"3.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"08a57972-d3e5-5597-b24c-bb2d7b2c056f\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"FRAME-F100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"596ba778-4ba3-5267-877d-b832641c75ea\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C100\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"54058c8c-ce63-54ad-8372-88872be0dc6c\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"SENSOR-S100\", \"component_revision_code\": \"A\", \"line_number\": 4, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"4ace0b8b-2c28-58da-92bc-14595f00242e\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"PLC-C100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\", \"bom_version_id\": \"f25bc473-3a85-5c35-a439-267b2ade4931\", \"bom_line_id\": \"302af747-a326-5260-aae6-0012f281b224\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"SENSOR-S100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"4.0\", \"cumulative_quantity\": \"4.00\", \"unit\": \"EA\", \"bom_version_id\": \"f25bc473-3a85-5c35-a439-267b2ade4931\", \"bom_line_id\": \"5abcf33c-c6c4-5afe-8b2c-347bcdc1bc5d\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C200\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\"",
+      "latency_ms": 47,
+      "answer_preview": "ROB-P100 在 2026-10-02 的有效 BOM（每件产品用量）：\n\n| 零件号 | 版本 | 需求数量 |\n| --- | --- | --- |\n| CABLE-C100 | A | 4 |\n| FRAME-F100 | A | 2 |\n| ASM-CTRL100 | A | 1 |\n| ASM-ARM100 | A | 1 |\n| FAN-FAN100 | A | 1 |\n| ENCLOSURE-EN100 | A | 1 |\n| SENSOR-S100 | A | 6 |\n| PLC-C100 | A | 1 |\n| FILTER-FL100 | A | 1 |\n| CABLE-C200 | A | 1 |\n| ASM-JOINT100 | A | 3 |\n| ASM-GEARBOX100 | A | 3 |\n| MOTOR-SM100 | A | 3 |\n| ENCODER-E100 | A | 3 |\n| SHAFT-S100 | A | 6 |\n| SCREW-SC100 | A | 24 |\n| SEAL-O100 | A | 6 |\n| BRG-6204-A | A | 6 |\n| GEAR-G100 | A | 9 |",
+      "evidence_preview": "ROB-P100 需要哪些零件？ {\"part_number\": \"ROB-P100\", \"revision_code\": \"A\", \"as_of_date\": \"2026-10-02\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_code\": \"BOM-ROB-P100-01\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-ARM100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"0f3634ea-8a15-5c69-9e13-166bec12c190\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-CTRL100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"218d964c-8e80-5e06-8953-7e00d9a7313f\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"FRAME-F100\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"bf7669ff-ef0a-5109-ad0f-5947ad4fddf8\"}, {\"bom_level\": 1, \"parent_part_number\": \"ROB-P100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C100\", \"component_revision_code\": \"A\", \"line_number\": 4, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.0\", \"unit\": \"EA\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_line_id\": \"b20e7838-df36-58c4-85a7-f42c93bb6f09\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"ASM-JOINT100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"3.0\", \"cumulative_quantity\": \"3.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"08a57972-d3e5-5597-b24c-bb2d7b2c056f\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"FRAME-F100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"596ba778-4ba3-5267-877d-b832641c75ea\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C100\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"54058c8c-ce63-54ad-8372-88872be0dc6c\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-ARM100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"SENSOR-S100\", \"component_revision_code\": \"A\", \"line_number\": 4, \"quantity_per\": \"2.0\", \"cumulative_quantity\": \"2.00\", \"unit\": \"EA\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_line_id\": \"4ace0b8b-2c28-58da-92bc-14595f00242e\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"PLC-C100\", \"component_revision_code\": \"A\", \"line_number\": 1, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\", \"bom_version_id\": \"f25bc473-3a85-5c35-a439-267b2ade4931\", \"bom_line_id\": \"302af747-a326-5260-aae6-0012f281b224\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"SENSOR-S100\", \"component_revision_code\": \"A\", \"line_number\": 2, \"quantity_per\": \"4.0\", \"cumulative_quantity\": \"4.00\", \"unit\": \"EA\", \"bom_version_id\": \"f25bc473-3a85-5c35-a439-267b2ade4931\", \"bom_line_id\": \"5abcf33c-c6c4-5afe-8b2c-347bcdc1bc5d\"}, {\"bom_level\": 2, \"parent_part_number\": \"ASM-CTRL100\", \"parent_revision_code\": \"A\", \"component_part_number\": \"CABLE-C200\", \"component_revision_code\": \"A\", \"line_number\": 3, \"quantity_per\": \"1.0\", \"cumulative_quantity\": \"1.00\", \"unit\": \"EA\"",
       "error_type": null
     },
     {
@@ -199,187 +199,48 @@
       "actual_agents": [],
       "actual_suggestion": null,
       "answer_status": "SUCCESS",
-      "latency_ms": 48,
-      "answer_preview": "BRG-6204-A 的未完成采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | PARTIALLY_RECEIVED | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |",
-      "evidence_preview": "BRG-6204-A 有哪些未完成采购订单？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"po_number\": \"PO-2026-000001\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-04\", \"po_expected_date\": \"2026-10-15\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"500.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-15\", \"line_status\": \"OPEN\"}, {\"po_number\": \"PO-2026-000004\", \"po_status\": \"PARTIALLY_RECEIVED\", \"po_order_date\": \"2026-08-08\", \"po_expected_date\": \"2026-10-05\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"300.0000\", \"received_qty\": \"100.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-05\", \"line_status\": \"PARTIALLY_RECEIVED\"}, {\"po_number\": \"PO-2026-000007\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-14\", \"po_expected_date\": \"2026-10-25\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"200.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-25\", \"line_status\": \"OPEN\"}]} BRG-6204-A 的未完成采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | PARTIALLY_RECEIVED | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |",
+      "latency_ms": 33,
+      "answer_preview": "BRG-6204-A 的未完成采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | 部分收货 | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |",
+      "evidence_preview": "BRG-6204-A 有哪些未完成采购订单？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"po_number\": \"PO-2026-000001\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-04\", \"po_expected_date\": \"2026-10-15\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"500.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-15\", \"line_status\": \"OPEN\"}, {\"po_number\": \"PO-2026-000004\", \"po_status\": \"PARTIALLY_RECEIVED\", \"po_order_date\": \"2026-08-08\", \"po_expected_date\": \"2026-10-05\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"300.0000\", \"received_qty\": \"100.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-05\", \"line_status\": \"PARTIALLY_RECEIVED\"}, {\"po_number\": \"PO-2026-000007\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-14\", \"po_expected_date\": \"2026-10-25\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"200.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-25\", \"line_status\": \"OPEN\"}]} BRG-6204-A 的未完成采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | 部分收货 | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |",
       "error_type": null
     },
     {
       "case_id": "supply_risk",
-      "passed": true,
-      "metrics": {
-        "tool_selection_accuracy": 1.0,
-        "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
-        "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
-        "workflow_suggestion_accuracy": 1.0,
-        "task_completion_rate": 1.0
-      },
-      "issues": [],
-      "actual_tools": [
-        "get_inventory",
-        "get_purchase_orders",
-        "find_where_used",
-        "get_part_revisions"
-      ],
-      "actual_agents": [
-        "SupplyAgent",
-        "StructureAgent"
-      ],
-      "actual_suggestion": null,
-      "answer_status": "SUCCESS",
-      "latency_ms": 151,
-      "answer_preview": "### 企业事实\n\n**SupplyAgent**\n\nBRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。\n\nBRG-6204-A 的采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | PARTIALLY_RECEIVED | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |\n\n**StructureAgent**\n\n当前有效产品结构中，BRG-6204-A 被以下产品使用：CON-C100、PAL-P300、ROB-P100、ROB-P200。\n\n### 领域风险\n\n- 供应与采购风险需结合已核验事实评估。\n- 产品结构风险需结合已核验事实评估。\n\n### 综合判断\n\n已核验的领域事实需要审慎评估，尚未核验的信息不作确定结论。\n\n### 建议动作\n\n- 核验缺口后再决定是否启动正式流程。",
-      "evidence_preview": "BRG-6204-A 的供应风险怎么样？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"plant_code\": null, \"warehouse_code\": null, \"rows\": [{\"plant_code\": \"CN-E01\", \"warehouse_code\": \"WH-01\", \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"qty_on_hand\": \"820.0000\", \"qty_reserved\": \"120.0000\", \"unit_cost\": \"12.5000\", \"currency\": \"CNY\", \"updated_at\": \"2026-09-01T00:00:00Z\"}]} BRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。 {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"po_number\": \"PO-2026-000001\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-04\", \"po_expected_date\": \"2026-10-15\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"500.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-15\", \"line_status\": \"OPEN\"}, {\"po_number\": \"PO-2026-000004\", \"po_status\": \"PARTIALLY_RECEIVED\", \"po_order_date\": \"2026-08-08\", \"po_expected_date\": \"2026-10-05\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"300.0000\", \"received_qty\": \"100.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-05\", \"line_status\": \"PARTIALLY_RECEIVED\"}, {\"po_number\": \"PO-2026-000007\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-14\", \"po_expected_date\": \"2026-10-25\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"200.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-25\", \"line_status\": \"OPEN\"}]} BRG-6204-A 的采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | PARTIALLY_RECEIVED | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 | {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"as_of_date\": \"2026-09-28\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"255af5cd-ee12-5773-91a1-c649d20fba1b\", \"bom_code\": \"BOM-ASM-GEARBOX100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9e5af054-50ea-56fe-bcda-4bc19d4760da\", \"bom_code\": \"BOM-ASM-GEARBOX200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"06712d3a-4cee-5f29-846f-81a149d24610\", \"bom_code\": \"BOM-ASM-GEARBOX300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX400\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9bb16fc4-4467-5d4e-b4d9-ca61ffc27e20\", \"bom_code\": \"BOM-ASM-GEARBOX400-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-CONV100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"05ea13b7-c4e5-5d7a-a661-7cf71844e156\", \"bom_code\": \"BOM-ASM-CONV100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"832b85b4-9b0f-54e7-b97d-e02e2a241cf1\", \"bom_code\": \"BOM-ASM-JOINT100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"d9b05feb-ae63-59f3-a78f-7de36b38a5a9\", \"bom_code\": \"BOM-ASM-JOINT200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\"]}, {\"bom_level\": 2, \"ancestor_part_number\"",
-      "error_type": null
-    },
-    {
-      "case_id": "eol_impact",
       "passed": false,
       "metrics": {
-        "tool_selection_accuracy": 1.0,
+        "tool_selection_accuracy": 0.5,
         "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
+        "agent_selection_recall": 0.5,
+        "agent_selection_exact": 0.0,
         "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
+        "fact_grounding_rate": 0.8,
+        "unsupported_fact_rate": 0.19999999999999996,
         "workflow_suggestion_accuracy": 1.0,
         "task_completion_rate": 0.0
       },
       "issues": [
-        "任务未完成: TOOL_ERROR"
+        "缺少 Tool: find_where_used",
+        "误调用 Tool: get_supplier_parts",
+        "缺少 Agent: StructureAgent",
+        "无证据事实: 1000",
+        "无证据事实: 3",
+        "无证据事实: 900",
+        "任务未完成: SUCCESS"
       ],
       "actual_tools": [
-        "get_production_requirements",
-        "get_sales_order_records",
         "get_part_revisions",
-        "find_where_used",
-        "get_alternatives",
         "get_inventory",
-        "get_purchase_orders"
+        "get_purchase_orders",
+        "get_supplier_parts"
       ],
       "actual_agents": [
-        "StructureAgent",
-        "SupplyAgent",
-        "ProductionAgent",
-        "DeliveryAgent"
+        "SupplyAgent"
       ],
       "actual_suggestion": null,
-      "answer_status": "TOOL_ERROR",
-      "latency_ms": 184,
-      "answer_preview": "### 企业事实\n\n**StructureAgent**\n\n当前有效产品结构中，BRG-6204-A 被以下产品使用：CON-C100、PAL-P300、ROB-P100、ROB-P200。\n\nBRG-6204-A 的替代料：\n\n| 替代零件号 | 替代版本 | 资格状态 |\n| --- | --- | --- |\n| BRG-6204-B | A | 已认证 |\n| BRG-6204-C | A | 未认证 |\n\n**SupplyAgent**\n\nBRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。\n\nBRG-6204-A 的采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | PARTIALLY_RECEIVED | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 |\n\n**ProductionAgent**\n\n查询到的业务详情：\n- 零件号：BRG-6204-A\n- 版本：A\n- order_statuses：—\n\nrows：\n\n| 订单号 | order_status | 产品编号 | 产品版本 | 行号 | 零件号 | 版本 | 需求数量 |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| MO-2026-000001 | 已发布 | ROB-P100 | A | 1 | BRG-6204-A | A | 60 |\n| MO-2026-000002 | 进行中 | ROB-P100 | A | 1 | BRG-6204-A | A | 48 |\n| MO-2026-000003 | 已完成 | ROB-P100 | A | 1 | BRG-6204-A | A | 36 |\n| MO-2026-000004 | 已发布 | ROB-P200 | A | 1 | BRG-6204-A | A | 60 |\n| MO-2026-00",
-      "evidence_preview": "综合分析 BRG-6204-A 停产会对公司造成哪些影响？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"as_of_date\": \"2026-09-28\", \"bom_statuses\": [\"RELEASED\"], \"max_depth\": 5, \"rows\": [{\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"255af5cd-ee12-5773-91a1-c649d20fba1b\", \"bom_code\": \"BOM-ASM-GEARBOX100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9e5af054-50ea-56fe-bcda-4bc19d4760da\", \"bom_code\": \"BOM-ASM-GEARBOX200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"06712d3a-4cee-5f29-846f-81a149d24610\", \"bom_code\": \"BOM-ASM-GEARBOX300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\"]}, {\"bom_level\": 1, \"ancestor_part_number\": \"ASM-GEARBOX400\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"9bb16fc4-4467-5d4e-b4d9-ca61ffc27e20\", \"bom_code\": \"BOM-ASM-GEARBOX400-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-CONV100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"05ea13b7-c4e5-5d7a-a661-7cf71844e156\", \"bom_code\": \"BOM-ASM-CONV100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"832b85b4-9b0f-54e7-b97d-e02e2a241cf1\", \"bom_code\": \"BOM-ASM-JOINT100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-JOINT200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"d9b05feb-ae63-59f3-a78f-7de36b38a5a9\", \"bom_code\": \"BOM-ASM-JOINT200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\"]}, {\"bom_level\": 2, \"ancestor_part_number\": \"ASM-PAL100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"5be5a8bc-7b68-5640-bc69-891087e02d85\", \"bom_code\": \"BOM-ASM-PAL100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"3ea16499-4ecd-52c6-94fd-11e1e1428745\", \"bom_code\": \"BOM-ASM-ARM100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"ASM-ARM200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"ASSEMBLY\", \"bom_version_id\": \"062a8c23-a9e2-503b-a629-d05b060bad50\", \"bom_code\": \"BOM-ASM-ARM200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JOINT200\", \"ASM-ARM200\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"CON-C100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"19d48b4b-aafa-51e3-a8fe-03b4b5bbdc1a\", \"bom_code\": \"BOM-CON-C100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX300\", \"ASM-CONV100\", \"CON-C100\"]}, {\"bom_level\": 3, \"ancestor_part_number\": \"PAL-P300\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"828dbb31-3cc2-528b-a189-768a0e8c8742\", \"bom_code\": \"BOM-PAL-P300-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX400\", \"ASM-PAL100\", \"PAL-P300\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P100\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"4621a2f0-07f9-55e2-8b3d-2d9e32b4b170\", \"bom_code\": \"BOM-ROB-P100-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX100\", \"ASM-JOINT100\", \"ASM-ARM100\", \"ROB-P100\"]}, {\"bom_level\": 4, \"ancestor_part_number\": \"ROB-P200\", \"ancestor_revision_code\": \"A\", \"ancestor_part_type\": \"FINISHED_PRODUCT\", \"bom_version_id\": \"6aecb39d-af98-55c1-95eb-4ce4246c4908\", \"bom_code\": \"BOM-ROB-P200-01\", \"path\": [\"BRG-6204-A\", \"ASM-GEARBOX200\", \"ASM-JO",
-      "error_type": null
-    },
-    {
-      "case_id": "eol_suggestion",
-      "passed": true,
-      "metrics": {
-        "tool_selection_accuracy": 1.0,
-        "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
-        "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
-        "workflow_suggestion_accuracy": 1.0,
-        "task_completion_rate": 1.0
-      },
-      "issues": [],
-      "actual_tools": [
-        "get_supplier_parts",
-        "get_part_revisions"
-      ],
-      "actual_agents": [],
-      "actual_suggestion": "supplier_eol",
       "answer_status": "SUCCESS",
-      "latency_ms": 37,
-      "answer_preview": "查询到 1 条业务记录：\n\n| 供应商编号 | 零件号 | 版本 | 资格状态 | 状态 |\n| --- | --- | --- | --- | --- |\n| SUP-001 | BRG-6204-A | A | 已认证 | LAST_TIME_BUY |",
-      "evidence_preview": "BRG-6204-A 已停产，需要启动供应商停产分析吗？ [{\"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"manufacturer_part_number\": \"MW-6204-A\", \"status\": \"LAST_TIME_BUY\", \"qualification_status\": \"QUALIFIED\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"lead_time_days\": 30, \"minimum_order_qty\": \"50.0000\", \"last_time_buy_date\": \"2026-11-30\", \"eol_date\": \"2027-01-31\"}] 查询到 1 条业务记录：\n\n| 供应商编号 | 零件号 | 版本 | 资格状态 | 状态 |\n| --- | --- | --- | --- | --- |\n| SUP-001 | BRG-6204-A | A | 已认证 | LAST_TIME_BUY |",
-      "error_type": null
-    },
-    {
-      "case_id": "substitution_suggestion",
-      "passed": true,
-      "metrics": {
-        "tool_selection_accuracy": 1.0,
-        "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
-        "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
-        "workflow_suggestion_accuracy": 1.0,
-        "task_completion_rate": 1.0
-      },
-      "issues": [],
-      "actual_tools": [
-        "get_alternatives",
-        "get_part_revisions"
-      ],
-      "actual_agents": [],
-      "actual_suggestion": "material_substitution",
-      "answer_status": "SUCCESS",
-      "latency_ms": 35,
-      "answer_preview": "BRG-6204-A 的替代料：\n\n| 替代零件号 | 替代版本 | 资格状态 |\n| --- | --- | --- |\n| BRG-6204-B | A | 已认证 |\n| BRG-6204-C | A | 未认证 |",
-      "evidence_preview": "评估用 BRG-6204-B 替代 BRG-6204-A 是否可行？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"alternative_part_number\": \"BRG-6204-B\", \"alternative_revision_code\": \"A\", \"qualification_status\": \"QUALIFIED\", \"replacement_type\": \"DIRECT\", \"verified_at\": \"2026-09-01T00:00:00Z\", \"verified_by\": \"quality.engineer\", \"alternative_id\": \"8ffbabe3-5772-5a85-86f0-19a284f958bd\"}, {\"alternative_part_number\": \"BRG-6204-C\", \"alternative_revision_code\": \"A\", \"qualification_status\": \"UNQUALIFIED\", \"replacement_type\": \"CONDITIONAL\", \"verified_at\": \"2026-09-01T00:00:00Z\", \"verified_by\": \"quality.engineer\", \"alternative_id\": \"3f62c197-23e0-573a-b5fd-ece351e5d847\"}]} BRG-6204-A 的替代料：\n\n| 替代零件号 | 替代版本 | 资格状态 |\n| --- | --- | --- |\n| BRG-6204-B | A | 已认证 |\n| BRG-6204-C | A | 未认证 |",
-      "error_type": null
-    },
-    {
-      "case_id": "no_data",
-      "passed": true,
-      "metrics": {
-        "tool_selection_accuracy": 1.0,
-        "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
-        "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
-        "workflow_suggestion_accuracy": 1.0,
-        "task_completion_rate": 1.0
-      },
-      "issues": [],
-      "actual_tools": [
-        "get_part_revisions"
-      ],
-      "actual_agents": [],
-      "actual_suggestion": null,
-      "answer_status": "NO_DATA",
-      "latency_ms": 20,
-      "answer_preview": "暂无当前有效版本；如需历史查询，请指定日期和版本。",
-      "evidence_preview": "BRG-9999-X 当前库存是多少？ ",
-      "error_type": null
-    },
-    {
-      "case_id": "tool_failure",
-      "passed": true,
-      "metrics": {
-        "tool_selection_accuracy": 1.0,
-        "agent_selection_precision": 1.0,
-        "agent_selection_recall": 1.0,
-        "agent_selection_exact": 1.0,
-        "supervisor_routing_accuracy": 1.0,
-        "fact_grounding_rate": 1.0,
-        "unsupported_fact_rate": 0.0,
-        "workflow_suggestion_accuracy": 1.0,
-        "task_completion_rate": 1.0
-      },
-      "issues": [],
-      "actual_tools": [
-        "get_part_revisions",
-        "get_inventory"
-      ],
-      "actual_agents": [],
-      "actual_suggestion": null,
-      "answer_status": "TOOL_ERROR",
-      "latency_ms": 32,
-      "answer_preview": "业务查询失败，请稍后重试。",
-      "evidence_preview": "BRG-6204-A 当前库存是多少？ ",
+      "latency_ms": 4172,
+      "answer_preview": "### 企业事实\n\n- BRG-6204-A 当前可用库存 700。\n\n- BRG-6204-A 有 3 条未完成采购订单行：订购 1000，已收 100，未收 900；状态：未完成、部分收货。\n\n- 供应关系：SUP-001 MotionWorks（末次采购，已认证）。\n\n### 风险判断\n\n- 采购订单事实提示后续补货需核验交付兑现；停产情景下不能仅凭在途订单认定供给可靠。\n- 当前库存可提供短期缓冲，但不能单独证明长期供应连续性。\n- BRG-6204-A 当前可用库存 700，可提供短期需求缓冲；但存在 3 条未完成采购订单行，合计未收 900，且状态为未完成、部分收货，说明后续补货交付兑现存在待核验风险。供应关系为 SUP-001 MotionWorks（末次采购，已认证），但该认证与末次采购记录本身不足以单独证明长期供应连续性。综合看，短期供应风险相对可控，中期风险取决于在途订单能否按预期交付；若发生停产情景，不能仅凭在途订单认定供给可靠。\n\n### 建议动作\n\n- 将 BRG-6204-A 纳入正式供应风险评估，重点核验未完成采购订单行的交付兑现情况。\n- 区分当前库存缓冲与后续补货连续性，避免以短期库存覆盖长期供应风险。\n- 结合 SUP-001 MotionWorks 的供应与采购记录，评估是否需要调整正式变更处置。",
+      "evidence_preview": "BRG-6204-A 的供应风险怎么样？ {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"plant_code\": null, \"warehouse_code\": null, \"rows\": [{\"plant_code\": \"CN-E01\", \"warehouse_code\": \"WH-01\", \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"qty_on_hand\": \"820.0000\", \"qty_reserved\": \"120.0000\", \"unit_cost\": \"12.5000\", \"currency\": \"CNY\", \"updated_at\": \"2026-09-01T00:00:00Z\"}]} BRG-6204-A 当前库存：现有量 820，已预留 120，可用量 700；共 1 条库存记录。 {\"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"rows\": [{\"po_number\": \"PO-2026-000001\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-04\", \"po_expected_date\": \"2026-10-15\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"500.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-15\", \"line_status\": \"OPEN\"}, {\"po_number\": \"PO-2026-000004\", \"po_status\": \"PARTIALLY_RECEIVED\", \"po_order_date\": \"2026-08-08\", \"po_expected_date\": \"2026-10-05\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"300.0000\", \"received_qty\": \"100.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-05\", \"line_status\": \"PARTIALLY_RECEIVED\"}, {\"po_number\": \"PO-2026-000007\", \"po_status\": \"OPEN\", \"po_order_date\": \"2026-08-14\", \"po_expected_date\": \"2026-10-25\", \"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"line_number\": 1, \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"ordered_qty\": \"200.0000\", \"received_qty\": \"0.0000\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"expected_date\": \"2026-10-25\", \"line_status\": \"OPEN\"}]} BRG-6204-A 的未完成采购订单：\n\n| 采购订单号 | 订单状态 | 供应商 | 订购数量 | 已收数量 |\n| --- | --- | --- | --- | --- |\n| PO-2026-000001 | 未完成 | MotionWorks | 500 | 0 |\n| PO-2026-000004 | 部分收货 | MotionWorks | 300 | 100 |\n| PO-2026-000007 | 未完成 | MotionWorks | 200 | 0 | [{\"supplier_code\": \"SUP-001\", \"supplier_name\": \"MotionWorks\", \"part_number\": \"BRG-6204-A\", \"revision_code\": \"A\", \"manufacturer_part_number\": \"MW-6204-A\", \"status\": \"LAST_TIME_BUY\", \"qualification_status\": \"QUALIFIED\", \"unit_price\": \"12.5000\", \"currency\": \"CNY\", \"lead_time_days\": 30, \"minimum_order_qty\": \"50.0000\", \"last_time_buy_date\": \"2026-11-30\", \"eol_date\": \"2027-01-31\"}] 查询到 1 条业务记录：\n\n| 供应商编号 | 供应商 | 零件号 | 版本 | 资格状态 | 状态 |\n| --- | --- | --- | --- | --- | --- |\n| SUP-001 | MotionWorks | BRG-6204-A | A | 已认证 | 末次采购 |",
       "error_type": null
     }
   ]

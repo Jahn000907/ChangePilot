@@ -45,6 +45,8 @@ class DomainAgentResult(BaseModel):
     facts: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    missing_required: list[str] = Field(default_factory=list)
     recommendations: list[str] = Field(default_factory=list)
     evidence: list[DomainEvidence] = Field(default_factory=list)
     tool_calls: list[str] = Field(default_factory=list)

@@ -19,6 +19,7 @@ from app.agents.assistant_queries import (
     extract_entities,
     substitution_pair,
 )
+from app.core.business_display import business_value
 from app.core.business_time import shanghai_datetime
 from app.domain.dto.assistant import AssistantContext
 from app.domain.dto.multi_agent import MultiAgentResult
@@ -32,7 +33,8 @@ logger = logging.getLogger(__name__)
 _PROMPT = """你是 ChangePilot 企业智能助手，优先用简体中文自然回答。
 你具备通用大模型能力：一般知识、概念解释、总结、改写、翻译和写作可直接回答，无需 Tool。
 涉及本企业当前 BOM、Where-Used、替代料资格、库存、供应商及供应关系、采购/生产/销售订单或工程变更状态时，必须先调用对应只读 Tool；不得凭模型知识、会话记忆或上下文编造企业事实。
-混合问题先调用所有必要 Tool，再基于本轮成功结果分析；区分已查得事实与分析判断，不显示 Tool JSON。
+混合问题先调用所有必要 Tool，再基于本轮成功结果给出有用的定性判断；区分企业事实、分析判断、不确定项和建议动作。
+可以分析当前需求缓冲与后续补货连续性等关系，不要只重复“需进一步核验”；不得新增未核验编号、数量、百分比或交期。不显示 Tool JSON。
 Tool 失败或无数据时不得补造事实，也不得换用其他数据口径。Tool 参数由系统核对，不得猜版本、日期或编号。不得修改业务数据或自动启动正式流程。"""
 
 _PART_TOOLS = {
@@ -59,14 +61,6 @@ _DISPLAY_NAMES = {
     "manufacturer_part_number": "制造商料号", "lead_time_days": "交期（天）",
     "minimum_order_qty": "最小订购量", "line_number": "行号",
 }
-_DISPLAY_VALUES = {
-    "QUALIFIED": "已认证", "UNQUALIFIED": "未认证", "CONDITIONAL": "有条件认证",
-    "RELEASED": "已发布", "PASS": "通过", "REVISE": "需要修订",
-    "OPEN": "未完成", "IN_PROGRESS": "进行中", "COMPLETED": "已完成",
-    "CANCELLED": "已取消", "ACTIVE": "有效", "DRAFT": "草稿",
-}
-
-
 @dataclass(frozen=True)
 class ToolFact:
     name: str
@@ -175,8 +169,7 @@ class EnterpriseAssistant:
                     context, coordinated.tool_facts,
                     failed=result.status != "SUCCESS",
                     status=("SUCCESS" if result.status == "SUCCESS" else
-                            "NO_DATA" if not coordinated.tool_facts and result.status != "FAILED"
-                            else "TOOL_ERROR"),
+                            "PARTIAL" if result.status == "PARTIAL" else "TOOL_ERROR"),
                 )
 
         messages: list[BaseMessage] = [
@@ -308,15 +301,17 @@ class EnterpriseAssistant:
             return {"part_number": target, **self._date_argument(entities)}
         elif name == "get_supplier_parts":
             return {
-                "supplier": entities.supplier_code or (
-                    context.current_supplier_code if not entities.parts else None
+                "supplier": entities.supplier_code or entities.supplier_name or (
+                    context.current_supplier_code or context.current_supplier_name
+                    if not entities.parts else None
                 ),
                 "part_number": self._optional_subject(
-                    entities.parts, context.current_part if not entities.supplier_code else None,
+                    entities.parts,
+                    context.current_part if not (entities.supplier_code or entities.supplier_name) else None,
                 ),
             }
         elif name == "get_suppliers":
-            return {"search": entities.supplier_code or context.current_supplier_code}
+            return {"search": entities.supplier_code or entities.supplier_name or context.current_supplier_code or context.current_supplier_name}
         elif name == "get_purchase_order_records":
             return {
                 "order_number": entities.purchase_order or (
@@ -336,9 +331,15 @@ class EnterpriseAssistant:
             raise QueryResolutionError("查询失败：无法确定该 Tool 的安全参数。")
         arguments: dict[str, object] = {"part_number": target}
         if name in _REVISION_TOOLS:
-            arguments["revision_code"] = self._revision(
-                target, entities, context, tool_map, run_id, agent_name=agent_name,
-            )
+            try:
+                arguments["revision_code"] = self._revision(
+                    target, entities, context, tool_map, run_id, agent_name=agent_name,
+                )
+            except NoBusinessDataError:
+                if name != "get_inventory":
+                    raise
+                # An unknown candidate still deserves a real inventory lookup.
+                arguments["revision_code"] = None
         if name in _STRUCTURE_TOOLS:
             arguments.update(self._date_argument(entities))
         if name == "get_purchase_orders":
@@ -438,7 +439,7 @@ class EnterpriseAssistant:
             return True
         return any(word in question for word in (
             "它", "其中", "这个产品", "这个零件", "这个供应商", "库存", "BOM",
-            "替代料", "订单", "供应哪些", "被哪些产品使用", "Where-Used",
+            "替代料", "替代关系", "订单", "供应哪些", "供应关系", "被哪些产品使用", "Where-Used",
         )) and not any(word in question for word in ("什么是", "通常", "一般", "区别"))
 
     @classmethod
@@ -482,18 +483,30 @@ class EnterpriseAssistant:
         return False
 
     @staticmethod
-    def _grounded_analysis(analysis: str, facts: list[ToolFact], question: str) -> bool:
+    def _grounded_analysis(
+        analysis: str, facts: list[ToolFact], question: str,
+        verified_summaries: str = "",
+    ) -> bool:
         """Reject unsupported identifiers and numbers in model-authored prose."""
         import re
 
-        evidence = question + " " + " ".join(
+        evidence = question + " " + verified_summaries + " " + " ".join(
             json.dumps(fact.data, ensure_ascii=False, default=str) for fact in facts
         )
         codes = re.findall(r"\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b", analysis, re.IGNORECASE)
         if any(code.upper() not in evidence.upper() for code in codes):
             return False
-        numbers = re.findall(r"(?<![\w-])\d+(?:\.\d+)?(?![\w-])", analysis)
-        return all(number in evidence for number in numbers)
+        number_pattern = r"(?<![A-Za-z0-9])\d+(?:\.\d+)?(?![A-Za-z0-9])"
+        without_codes = re.sub(r"\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b", " ", analysis, flags=re.IGNORECASE)
+        evidence_without_codes = re.sub(
+            r"\b[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+\b", " ", evidence,
+            flags=re.IGNORECASE,
+        )
+        numbers = re.findall(number_pattern, without_codes)
+        evidence_numbers = {
+            Decimal(item) for item in re.findall(number_pattern, evidence_without_codes)
+        }
+        return all(Decimal(number) in evidence_numbers for number in numbers)
 
     @staticmethod
     def _data(result: ToolMessage) -> object | None:
@@ -514,6 +527,16 @@ class EnterpriseAssistant:
         revision = fact.arguments.get("revision_code")
         if isinstance(revision, str) and revision:
             context.current_revision = revision
+        context.last_intent = fact.name
+        context.last_result_type = "alternatives" if fact.name == "get_alternatives" else fact.name
+        context.last_result_entities = []
+        if fact.name == "get_alternatives" and isinstance(fact.data, dict):
+            context.last_result_entities = [
+                {"part_number": str(row["alternative_part_number"]),
+                 "qualification_status": str(row["qualification_status"])}
+                for row in fact.data.get("rows", [])[:50]
+                if isinstance(row, dict) and row.get("alternative_part_number")
+            ]
 
     @staticmethod
     def _empty_fact(fact: ToolFact) -> bool:
@@ -538,7 +561,7 @@ class EnterpriseAssistant:
             "unit_price", "unit_cost", "quality_rating", "delivery_rating",
         }:
             return format(Decimal(str(value)).normalize(), "f")
-        return _DISPLAY_VALUES.get(str(value), str(value)).replace("|", "\\|")
+        return business_value(value).replace("|", "\\|")
 
     @classmethod
     def _table(cls, rows: list[dict[str, object]], columns: tuple[str, ...]) -> str:
@@ -577,7 +600,7 @@ class EnterpriseAssistant:
         if fact.name == "get_inventory" and isinstance(data, dict):
             rows = data.get("rows", [])
             if not rows:
-                return f"暂无 {target} 的库存记录。"
+                return f"未查询到 {target} 的库存记录。"
             on_hand = sum(Decimal(str(row["qty_on_hand"])) for row in rows)
             reserved = sum(Decimal(str(row["qty_reserved"])) for row in rows)
             return (f"{target} 当前库存：现有量 {cls._display_value('qty_on_hand', on_hand)}，"
@@ -586,11 +609,13 @@ class EnterpriseAssistant:
                     f"共 {len(rows)} 条库存记录。")
         if fact.name == "get_alternatives" and isinstance(data, dict):
             rows = data.get("rows", [])
-            if "已认证" in question:
-                rows = [row for row in rows if row.get("qualification_status") == "QUALIFIED"]
+            qualification = "UNQUALIFIED" if "未认证" in question else "QUALIFIED" if "已认证" in question else None
+            if qualification:
+                rows = [row for row in rows if row.get("qualification_status") == qualification]
             if not rows:
-                return f"暂无 {target} 的{'已认证' if '已认证' in question else ''}替代料记录。"
-            return f"{target} 的{'已认证' if '已认证' in question else ''}替代料：\n\n" + cls._table(
+                return f"暂无 {target} 的{'未认证' if qualification == 'UNQUALIFIED' else '已认证' if qualification else ''}替代料记录。"
+            label = "未认证" if qualification == "UNQUALIFIED" else "已认证" if qualification else ""
+            return f"{target} 的{label}替代料：\n\n" + cls._table(
                 rows, ("alternative_part_number", "alternative_revision_code", "qualification_status"),
             )
         if fact.name == "get_purchase_orders" and isinstance(data, dict):
@@ -606,7 +631,7 @@ class EnterpriseAssistant:
             rows = [row for row in data if isinstance(row, dict)]
             columns = {
                 "get_suppliers": ("supplier_code", "supplier_name", "status"),
-                "get_supplier_parts": ("supplier_code", "part_number", "revision_code", "qualification_status", "status"),
+                "get_supplier_parts": ("supplier_code", "supplier_name", "part_number", "revision_code", "qualification_status", "status"),
                 "get_purchase_order_records": ("order_number", "supplier_code", "status", "expected_date"),
                 "get_production_order_records": ("order_number", "product_part_number", "status", "planned_qty", "planned_start"),
                 "get_sales_order_records": ("order_number", "customer_code", "status", "order_date"),
@@ -628,18 +653,20 @@ class EnterpriseAssistant:
     @staticmethod
     def _format_multi_agent(result: MultiAgentResult) -> str:
         sections: list[str] = ["### 企业事实"]
+        if result.status == "PARTIAL":
+            sections.insert(0, "**部分领域查询失败，本次结论基于已成功核验的数据。**")
         for domain in result.domains:
             if domain.facts:
-                sections.append(f"**{domain.agent_name.value}**\n\n" + "\n\n".join(domain.facts))
+                sections.extend(f"- {item}" for item in domain.facts)
         if len(sections) == 1:
             sections.append("暂无经核验的企业事实。")
         risks = [risk for domain in result.domains for risk in domain.risks]
-        if risks:
-            sections.append("### 领域风险\n\n" + "\n".join(f"- {risk}" for risk in risks))
+        sections.append("### 风险判断\n\n" + "\n".join(
+            f"- {item}" for item in [*risks, result.judgment] if item
+        ))
         unknowns = [item for domain in result.domains for item in domain.unknowns]
         if unknowns:
             sections.append("### 不确定项\n\n" + "\n".join(f"- {item}" for item in unknowns))
-        sections.append("### 综合判断\n\n" + result.judgment)
         recommendations = [*result.recommendations]
         if recommendations:
             sections.append("### 建议动作\n\n" + "\n".join(

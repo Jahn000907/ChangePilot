@@ -604,8 +604,11 @@ def test_unqualified_candidate_cannot_pass_as_qualified():
         state = MaterialSubstitutionWorkflowState.model_validate(response.json()["state"])
         assert state.impact and state.impact.qualification_status == "UNQUALIFIED"
         assert state.review_result and state.review_result.decision == "REVISE"
-        assert state.revision_count == 2
-        assert response.json()["status"] == "COMPLETED"
+        assert state.revision_count == 1
+        assert state.review_count == 2
+        assert state.review_exhausted
+        assert response.json()["status"] == "INTERRUPTED"
+        assert response.json()["approval_request"]["review_exhausted"] is True
         assert state.approval is None and state.execution_result is None
     finally:
         if state is not None:

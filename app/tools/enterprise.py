@@ -7,6 +7,7 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.data_center import DataCenterService
+from app.services.erp_facts import ERPFactService
 from app.services.product_structure import ProductStructureService
 
 
@@ -38,6 +39,10 @@ class OrderQuery(_Input):
 class PurchaseQuery(OrderQuery):
     open_only: bool = False
     supplier_code: str | None = Field(default=None, max_length=64)
+
+
+class AffectedProductsQuery(_Input):
+    product_references: list[tuple[str, str]] = Field(min_length=1)
 
 
 def get_suppliers(request: SupplierQuery, *, service: DataCenterService | None = None):
@@ -79,3 +84,10 @@ def get_production_orders_for_part(request: PartQuery, *, service: DataCenterSer
 def get_sales_order_records(request: OrderQuery, *, service: DataCenterService | None = None):
     active = service or DataCenterService()
     return active.sales_order(request.order_number) if request.order_number else active.sales_orders()
+
+
+def get_sales_orders_for_products(
+    request: AffectedProductsQuery, *, service: ERPFactService | None = None,
+):
+    """Return only sales lines for verified affected product revisions."""
+    return (service or ERPFactService()).sales_order_lines(request.product_references)

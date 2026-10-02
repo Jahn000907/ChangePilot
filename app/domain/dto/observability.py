@@ -13,11 +13,13 @@ class AgentRunSummary(BaseModel):
     thread_id: str | None = None
     workflow_name: str
     status: str
+    analysis_status: str | None = None
     started_at: datetime
     finished_at: datetime | None
     duration_ms: int | None
     error_summary: str | None = None
     has_supervisor: bool = False
+    agent_count: int = 0
     selected_agents: list[str] = Field(default_factory=list)
     called_tools: list[str] = Field(default_factory=list)
 

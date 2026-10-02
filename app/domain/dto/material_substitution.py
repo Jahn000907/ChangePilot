@@ -86,6 +86,8 @@ class MaterialSubstitutionWorkflowState(BaseModel):
     impact: MaterialSubstitutionImpact | None = None
     strategies: list[StrategyCandidate] = Field(default_factory=list)
     review_result: ReviewResult | None = None
+    review_count: int = 0
+    review_exhausted: bool = False
     revision_count: int = 0
     approval: HumanApproval | None = None
     approval_status: str = "NOT_STARTED"
@@ -95,6 +97,6 @@ class MaterialSubstitutionWorkflowState(BaseModel):
 
 class MaterialSubstitutionWorkflowResult(BaseModel):
     thread_id: str
-    status: Literal["INTERRUPTED", "COMPLETED"]
+    status: Literal["RUNNING", "INTERRUPTED", "COMPLETED", "FAILED"]
     state: MaterialSubstitutionWorkflowState
     approval_request: HumanApprovalRequest | None = None

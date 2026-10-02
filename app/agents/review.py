@@ -19,14 +19,9 @@ if TYPE_CHECKING:
     from app.workflows.state import SupplierEOLWorkflowState
 
 
-_REVIEW_PROMPT = """Review Supplier EOL engineering strategy candidates against the supplied
-impact facts. Check for invented facts, misuse of unqualified alternatives, ignored inventory,
-purchase, production or product-structure risks, unsupported rationale, and facts that need
-verification. You may call only the provided read-only Tools when verification is necessary.
-Never request or perform a write. After any Tool results, return only one JSON object containing
-decision (PASS or REVISE), summary, issues, and recommendations. PASS means the candidates are
-fact-consistent enough for later human consideration; it is not final approval.
-Use exactly this shape with no extra fields or nested objects:
+_REVIEW_PROMPT = """根据供应商停产影响事实审查候选策略。检查编造事实、未认证替代料误用、忽略库存/采购/生产/产品结构风险、依据不足与待核验事项。
+必要时只调用提供的只读 Tool；不得请求或执行写操作。PASS 仅表示可供人工考虑，不是最终批准。
+仅返回以下 JSON，字段名和 decision 枚举保持英文；summary、issues、recommendations 必须使用简体中文，零件号等技术标识可保留英文：
 {"decision":"PASS|REVISE","summary":"string","issues":["string"],
 "recommendations":["string"]}."""
 

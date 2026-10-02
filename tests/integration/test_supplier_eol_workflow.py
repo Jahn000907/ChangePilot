@@ -401,8 +401,8 @@ def test_approve_resumes_interrupted_workflow_with_same_thread():
         _cleanup(state)
 
 
-def test_revise_routes_to_strategy_and_stops_at_revision_limit():
-    """Two revisions are generated before a third REVISE review ends the graph."""
+def test_revise_routes_to_strategy_and_pauses_at_review_limit():
+    """A second REVISE keeps its verdict and waits for human intervention."""
     _require_backends()
     suffix = uuid.uuid4().hex[:12]
     state = None
@@ -411,25 +411,28 @@ def test_revise_routes_to_strategy_and_stops_at_revision_limit():
     review_llm = _AlwaysReviseReviewLLM()
     try:
         try:
-            completed = run_supplier_eol_workflow(
+            pending = run_supplier_eol_workflow(
                 _request(suffix),
                 thread_id=f"revision-limit-{suffix}",
                 strategy_agent=StrategyAgent(strategy_llm),
                 review_agent=ReviewAgent(review_llm),
                 checkpointer=checkpointer,
             )
-            state = completed.state
+            state = pending.state
         except EntityNotFoundError as exc:  # pragma: no cover - seed dependent
             pytest.skip(f"golden seed is not loaded: {exc}")
 
         assert state.review_result is not None
-        assert completed.status is WorkflowRunStatus.COMPLETED
+        assert pending.status is WorkflowRunStatus.INTERRUPTED
+        assert pending.approval_request is not None
+        assert pending.approval_request.review_exhausted
         assert state.review_result.decision == "REVISE"
-        assert state.revision_count == 2
-        assert strategy_llm.call_count == 3
-        assert strategy_llm.feedback_call_count == 2
-        assert review_llm.call_count == 3
-        assert json.loads(state.model_dump_json())["revision_count"] == 2
+        assert state.review_count == 2
+        assert state.revision_count == 1
+        assert strategy_llm.call_count == 2
+        assert strategy_llm.feedback_call_count == 1
+        assert review_llm.call_count == 2
+        assert json.loads(state.model_dump_json())["review_exhausted"] is True
     finally:
         _cleanup(state)
 

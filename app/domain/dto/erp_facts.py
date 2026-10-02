@@ -66,7 +66,7 @@ class InventoryFactResult(_FactModel):
     """Inventory balances of one part revision."""
 
     part_number: str
-    revision_code: str
+    revision_code: str | None
     plant_code: str | None = None
     warehouse_code: str | None = None
     rows: list[InventoryFact]

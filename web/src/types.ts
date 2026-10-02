@@ -109,6 +109,8 @@ export interface ApprovalRequest {
   impact_summary: Record<string, unknown>;
   strategies: StrategyCandidate[];
   review_result: ReviewResult;
+  review_exhausted: boolean;
+  human_intervention_reason: string | null;
 }
 
 export interface WorkflowState {
@@ -122,6 +124,8 @@ export interface WorkflowState {
   impact: SupplierEOLImpact | null;
   strategies: StrategyCandidate[];
   review_result: ReviewResult | null;
+  review_count: number;
+  review_exhausted: boolean;
   revision_count: number;
   approval: HumanApproval | null;
   approval_status: string;
@@ -133,7 +137,7 @@ export interface WorkflowState {
 
 export interface WorkflowResult {
   thread_id: string;
-  status: "INTERRUPTED" | "COMPLETED";
+  status: "RUNNING" | "INTERRUPTED" | "COMPLETED" | "FAILED";
   state: WorkflowState;
   approval_request: ApprovalRequest | null;
   interrupt_id: string | null;

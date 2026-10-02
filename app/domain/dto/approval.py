@@ -41,3 +41,5 @@ class HumanApprovalRequest(BaseModel):
     impact_summary: dict[str, object]
     strategies: list[StrategyCandidate] = Field(min_length=1)
     review_result: ReviewResult
+    review_exhausted: bool = False
+    human_intervention_reason: str | None = None

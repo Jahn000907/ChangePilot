@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Protocol
 
 from pydantic import BaseModel
@@ -43,9 +44,13 @@ class DataCenterService:
     def supplier_parts(
         self, supplier: str | None = None, part_number: str | None = None
     ) -> list[SupplierPartRow]:
+        supplier = _query(supplier)
+        selected = re.fullmatch(r".+\(\s*(SUP-[A-Z0-9-]+)\s*\)", supplier, re.IGNORECASE) if supplier else None
+        if selected:
+            supplier = selected.group(1)
         return _rows(
             SupplierPartRow,
-            self._repository.supplier_parts(_query(supplier), _query(part_number)),
+            self._repository.supplier_parts(supplier, _query(part_number)),
         )
 
     def inventory(self, part_number: str | None = None) -> list[InventoryRow]:

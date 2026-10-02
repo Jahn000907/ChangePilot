@@ -9,6 +9,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
 from app.tools.enterprise import (
+    AffectedProductsQuery,
     OrderQuery,
     PartQuery,
     PartRevisionQuery,
@@ -20,6 +21,7 @@ from app.tools.enterprise import (
     get_production_orders_for_part,
     get_purchase_order_records,
     get_sales_order_records,
+    get_sales_orders_for_products,
     get_supplier_parts,
     get_suppliers,
 )
@@ -116,6 +118,8 @@ def get_enterprise_tools() -> list[BaseTool]:
         ("get_production_order_records", OrderQuery, get_production_order_records, "查询本企业生产订单列表、指定 MO 详情及物料需求；问真实生产订单必须调用，解释生产订单概念无需调用。"),
         ("get_production_orders_for_part", PartQuery, get_production_orders_for_part, "查询本企业某零件关联的生产订单及物料需求；问某零件关联哪些生产订单必须调用，解释生产排程无需调用。"),
         ("get_sales_order_records", OrderQuery, get_sales_order_records, "查询本企业销售订单列表或指定 SO 详情；问真实销售订单必须调用，解释销售订单概念无需调用。"),
+        ("get_sales_orders_for_products", AffectedProductsQuery, get_sales_orders_for_products,
+         "查询本企业已核验受影响成品版本对应的销售订单行；分析零件停产交付影响时必须先核验 Where-Used，不能查询全公司订单替代；解释销售概念无需调用。"),
     ]
     return get_review_tools() + [
         StructuredTool.from_function(

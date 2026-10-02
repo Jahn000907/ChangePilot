@@ -16,6 +16,7 @@ export default function AssistantPanel({ onSuggestion }: Props) {
   const [current, setCurrent] = useState<ConversationDetail | null>(null);
   const [draft, setDraft] = useState("");
   const [suggestion, setSuggestion] = useState<WorkflowSuggestion | null>(null);
+  const [menuConversation, setMenuConversation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
@@ -28,6 +29,7 @@ export default function AssistantPanel({ onSuggestion }: Props) {
 
   async function openConversation(id: string) {
     if (busyRef.current) return;
+    setMenuConversation(null);
     busyRef.current = true;
     setLoading(true);
     setError(null);
@@ -44,6 +46,7 @@ export default function AssistantPanel({ onSuggestion }: Props) {
 
   async function createConversation() {
     if (busyRef.current) return;
+    setMenuConversation(null);
     busyRef.current = true;
     setLoading(true);
     setError(null);
@@ -54,6 +57,30 @@ export default function AssistantPanel({ onSuggestion }: Props) {
       setSuggestion(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "无法新建会话");
+    } finally {
+      busyRef.current = false;
+      setLoading(false);
+    }
+  }
+
+  async function deleteConversation(id: string) {
+    if (busyRef.current || !window.confirm(
+      "删除后，该会话的消息与上下文将永久清除，无法恢复。Agent 运行记录和正式流程记录不会删除。",
+    )) return;
+    setMenuConversation(null);
+    busyRef.current = true;
+    setLoading(true);
+    setError(null);
+    try {
+      await assistantApi.remove(id);
+      const remaining = await assistantApi.list();
+      setConversations(remaining);
+      if (current?.id === id) {
+        setCurrent(remaining.length ? await assistantApi.get(remaining[0].id) : null);
+        setSuggestion(null);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "删除会话失败");
     } finally {
       busyRef.current = false;
       setLoading(false);
@@ -98,12 +125,25 @@ export default function AssistantPanel({ onSuggestion }: Props) {
           <div className="assistant-conversations">
             {conversations.length === 0 && <p className="muted">还没有对话</p>}
             {conversations.map((item) => (
-              <button key={item.id} type="button"
+              <div key={item.id} className="conversation-row"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setMenuConversation(item.id);
+                }}><button type="button"
                 className={current?.id === item.id ? "conversation active" : "conversation"}
                 onClick={() => void openConversation(item.id)} disabled={loading}>
                 <strong>{item.title}</strong>
                 <small>{formatShanghaiTime(item.updated_at)}</small>
-              </button>
+              </button><button type="button" className="conversation-more"
+                aria-label={`会话 ${item.title} 的更多操作`} aria-haspopup="menu"
+                aria-expanded={menuConversation === item.id}
+                onClick={() => setMenuConversation(menuConversation === item.id ? null : item.id)}
+                disabled={loading}>⋯</button>
+                {menuConversation === item.id && <div className="conversation-menu" role="menu">
+                  <button type="button" role="menuitem"
+                    onClick={() => void deleteConversation(item.id)} disabled={loading}>删除会话</button>
+                </div>}
+              </div>
             ))}
           </div>
         </aside>

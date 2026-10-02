@@ -37,7 +37,7 @@ class InventoryRepository(ReadOnlyRepository):
     def find_inventory(
         self,
         part_number: str,
-        revision_code: str,
+        revision_code: str | None,
         plant_code: str | None = None,
         warehouse_code: str | None = None,
     ) -> list[InventoryFact]:
@@ -55,9 +55,10 @@ class InventoryRepository(ReadOnlyRepository):
                 InventoryBalance.updated_at.label("updated_at"),
             )
             .where(InventoryBalance.part_number == part_number)
-            .where(InventoryBalance.revision_code == revision_code)
             .order_by(InventoryBalance.plant_code, InventoryBalance.warehouse_code)
         )
+        if revision_code is not None:
+            statement = statement.where(InventoryBalance.revision_code == revision_code)
         if plant_code is not None:
             statement = statement.where(InventoryBalance.plant_code == plant_code)
         if warehouse_code is not None:

@@ -78,13 +78,13 @@ class ERPFactService:
     def inventory(
         self,
         part_number: str,
-        revision_code: str,
+        revision_code: str | None,
         plant_code: str | None = None,
         warehouse_code: str | None = None,
     ) -> InventoryFactResult:
         """Return inventory balances, optionally filtered by plant / warehouse."""
         part_number = _require_identifier(part_number, "part_number")
-        revision_code = _require_identifier(revision_code, "revision_code")
+        revision_code = _optional_identifier(revision_code, "revision_code")
         plant_code = _optional_identifier(plant_code, "plant_code")
         warehouse_code = _optional_identifier(warehouse_code, "warehouse_code")
         rows = [

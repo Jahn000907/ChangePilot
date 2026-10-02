@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.postgres.models.assistant import AssistantConversation, AssistantMessage
@@ -61,4 +61,11 @@ class AssistantRepository:
     ) -> None:
         conversation.context_json = context
         conversation.updated_at = datetime.now(UTC)
+        self._session.flush()
+
+    def delete_conversation(self, conversation: AssistantConversation) -> None:
+        self._session.execute(delete(AssistantMessage).where(
+            AssistantMessage.conversation_id == conversation.id
+        ))
+        self._session.delete(conversation)
         self._session.flush()

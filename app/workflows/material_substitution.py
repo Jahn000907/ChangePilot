@@ -29,27 +29,19 @@ from app.workflows.postgres_checkpoint import (
     get_postgres_checkpointer,
 )
 
-MAX_STRATEGY_REVISIONS = 2
-_STRATEGY_PROMPT = """Generate candidate engineering strategies for a material substitution.
-Use only the supplied deterministic facts. The candidate part's qualification_status is
-authoritative: UNQUALIFIED, CONDITIONAL and NOT_LISTED must not be described as ready for
-direct substitution. Never invent inventory, procurement, BOM, or production quantities.
-This is a material-substitution request, not an EOL notice. Do not propose LAST_TIME_BUY
-unless the supplied facts explicitly contain an EOL or last-time-buy date. For a QUALIFIED
-candidate, propose validation, controlled planning and human approval before switching;
-do not claim that ERP or BOM has already been changed.
-Return only JSON object {"strategies":[{"strategy_type":"QUALIFIED_ALTERNATIVE",
-"title":"...","summary":"...","rationale":"...","actions":["..."],"risks":["..."]}]}.
-Allowed strategy_type: QUALIFIED_ALTERNATIVE, QUALIFICATION_REQUIRED, REDESIGN,
-SUPPLY_MITIGATION, LAST_TIME_BUY. Do not make final approval decisions."""
-_REVIEW_PROMPT = """Review material substitution strategies against the supplied facts.
-In particular, never permit direct adoption of an UNQUALIFIED, CONDITIONAL or NOT_LISTED
-candidate. Verify uncertain business facts only with provided read-only Tools. Do not write.
-Future validation actions are proposals, not claims that validation has already happened.
-PASS when factual claims are grounded and the strategy keeps approval and execution gated;
-do not require human approval to have happened before this review.
-Return JSON only: {"decision":"PASS|REVISE","summary":"...","issues":[],"recommendations":[]}.
-PASS means suitable for later human consideration, not approval."""
+MAX_REVIEW_ITERATIONS = 2
+_STRATEGY_PROMPT = """你为物料替代评估生成候选工程处置策略。只依据提供的确定性事实，不得编造库存、采购、BOM 或生产数量。
+候选料资格状态是权威事实：UNQUALIFIED、CONDITIONAL、NOT_LISTED 不得描述为可以直接切换。
+这是物料替代，不是停产通知；事实未明确给出 EOL 或末次采购日期时，不得提出 LAST_TIME_BUY。
+对于 QUALIFIED 候选料，应提出验证、受控计划和人工审批，不得声称 ERP 或 BOM 已更改；不代替人工批准。
+只返回 JSON：{"strategies":[{"strategy_type":"QUALIFIED_ALTERNATIVE","title":"...","summary":"...","rationale":"...","actions":["..."],"risks":["..."]}]}。
+strategy_type 仅可为 QUALIFIED_ALTERNATIVE、QUALIFICATION_REQUIRED、REDESIGN、SUPPLY_MITIGATION、LAST_TIME_BUY。
+JSON 字段和枚举保持英文；title、summary、rationale、actions、risks 的用户可见正文必须为简体中文，零件号、日期及标准技术缩写可保留英文。正文中的资格和替代类型请用“已认证”“未认证”“直接替代”等中文表述，不要堆叠内部枚举名。"""
+_REVIEW_PROMPT = """根据提供的物料替代事实审查策略。UNQUALIFIED、CONDITIONAL、NOT_LISTED 候选料不能直接采用。
+不确定的企业事实只可用提供的只读 Tool 核验；不得写入业务数据。未来验证行动是建议，不是已完成的事实。
+事实有据且人工审批和执行仍受控时可判 PASS；PASS 仅表示可供人工考虑，不代表已批准。
+只返回 JSON：{"decision":"PASS|REVISE","summary":"...","issues":[],"recommendations":[]}。
+JSON 字段和 decision 枚举保持英文；summary、issues、recommendations 的用户可见正文必须为简体中文，零件号、日期及标准技术缩写可保留英文。正文中的评审判断、资格和替代类型请用中文表述，不要堆叠内部枚举名。"""
 
 
 def build_material_substitution_workflow(
@@ -116,7 +108,14 @@ def build_material_substitution_workflow(
                 strategies=[item.model_dump(mode="json") for item in state.strategies],
                 run_id=state.run_id, system_prompt=_REVIEW_PROMPT,
             )
-        return {"review_result": result, "status": "REVIEW_COMPLETE"}
+        review_count = state.review_count + 1
+        exhausted = result.decision == "REVISE" and review_count >= MAX_REVIEW_ITERATIONS
+        return {
+            "review_result": result, "review_count": review_count,
+            "review_exhausted": exhausted,
+            "approval_status": "PENDING" if result.decision == "PASS" or exhausted else "NOT_STARTED",
+            "status": "REVIEW_COMPLETE",
+        }
 
     def approval_node(state: MaterialSubstitutionWorkflowState) -> dict[str, object]:
         if not state.impact or not state.review_result or not state.strategies:
@@ -135,6 +134,11 @@ def build_material_substitution_workflow(
                 "affected_products": state.impact.affected_products,
             },
             strategies=state.strategies, review_result=state.review_result,
+            review_exhausted=state.review_exhausted,
+            human_intervention_reason=(
+                "自动策略修订已达到上限，当前评审仍存在问题，需要人工决定。"
+                if state.review_exhausted else None
+            ),
         )
         approval = HumanApproval.model_validate(interrupt(request.model_dump(mode="json")))
         trace.audit(
@@ -142,7 +146,13 @@ def build_material_substitution_workflow(
             actor_type="HUMAN", actor_id=approval.reviewer or "anonymous-reviewer",
             action=f"HUMAN_{approval.decision.value}", object_type="CHANGE_CASE",
             object_id=str(state.case_id),
-            after_state={"decision": approval.decision.value},
+            after_state={"decision": approval.decision.value, "comment": approval.comment},
+            metadata={
+                "review_decision": state.review_result.decision.value,
+                "review_exhausted": state.review_exhausted,
+                "review_risk_accepted": bool(state.review_exhausted and approval.decision == "APPROVE"),
+                "selected_strategy_index": approval.selected_strategy_index,
+            },
         )
         return {"approval": approval, "approval_status": "COMPLETED", "status": "APPROVED" if approval.decision == "APPROVE" else "REJECTED"}
 
@@ -193,7 +203,7 @@ def build_material_substitution_workflow(
     graph.add_edge("impact_analysis", "strategy_generation")
     graph.add_edge("strategy_generation", "review")
     graph.add_conditional_edges("review", _after_review, {
-        "revise": "strategy_generation", "approve": "human_approval", "end": END,
+        "revise": "strategy_generation", "approve": "human_approval",
     })
     graph.add_conditional_edges("human_approval", _after_approval, {
         "execute": "execution", "end": END,
@@ -255,7 +265,7 @@ def _after_review(state: MaterialSubstitutionWorkflowState | dict[str, object]) 
         raise ValueError("缺少评审结果")
     if parsed.review_result.decision == "PASS":
         return "approve"
-    return "end" if parsed.revision_count >= MAX_STRATEGY_REVISIONS else "revise"
+    return "approve" if parsed.review_exhausted else "revise"
 
 
 def _after_approval(state: MaterialSubstitutionWorkflowState | dict[str, object]) -> str:
@@ -316,4 +326,8 @@ def _result(graph: object, config: dict[str, dict[str, str]], thread_id: str) ->
             thread_id=thread_id, status="INTERRUPTED", state=state,
             approval_request=HumanApprovalRequest.model_validate(interrupts[0].value),
         )
+    if any(getattr(task, "error", None) for task in snapshot.tasks):
+        return MaterialSubstitutionWorkflowResult(thread_id=thread_id, status="FAILED", state=state)
+    if snapshot.next:
+        return MaterialSubstitutionWorkflowResult(thread_id=thread_id, status="RUNNING", state=state)
     return MaterialSubstitutionWorkflowResult(thread_id=thread_id, status="COMPLETED", state=state)

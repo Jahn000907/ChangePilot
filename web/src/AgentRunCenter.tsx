@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { agentRunsApi } from "./api";
+import { businessStatus } from "./businessDisplay";
 import { formatShanghaiTime } from "./display";
 import type { AgentRunDetail, AgentRunSummary } from "./observabilityTypes";
 
@@ -14,10 +15,6 @@ const names: Record<string, string> = {
   DeliveryAgent: "交付 Agent", impact_analysis: "影响分析",
   strategy_generation: "策略生成", review: "策略评审",
   human_approval: "人工审批", execution: "工程变更执行",
-};
-const statuses: Record<string, string> = {
-  RUNNING: "运行中", WAITING_HUMAN: "等待人工审批", SUCCEEDED: "成功",
-  FAILED: "失败", CANCELLED: "已取消", STARTED: "已开始", PENDING: "待执行",
 };
 const jobTypes: Record<string, string> = {
   PURCHASE_ACTION: "采购调整", PRODUCTION_ACTION: "生产计划",
@@ -41,6 +38,16 @@ export default function AgentRunCenter() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const visibleRuns = runs.filter((run) =>
+    (statusFilter === "ALL" || run.status === statusFilter) &&
+    (typeFilter === "ALL" || (typeFilter === "multi_agent"
+      ? run.workflow_name === "enterprise_assistant" && run.has_supervisor
+      : typeFilter === "enterprise_assistant"
+        ? run.workflow_name === "enterprise_assistant" && !run.has_supervisor
+        : run.workflow_name === typeFilter)),
+  );
 
   async function refresh() {
     setLoading(true);
@@ -79,30 +86,43 @@ export default function AgentRunCenter() {
         disabled={loading}>刷新记录</button>
     </div>
     {error && <div className="error-banner" role="alert">{error}</div>}
-    <div className="run-layout">
-      <section className="panel run-list">
-        <h3>最近运行</h3>
+    <div className="run-filters">
+      <label>状态 <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+        <option value="ALL">全部</option><option value="SUCCEEDED">成功</option>
+        <option value="FAILED">失败</option><option value="RUNNING">运行中</option>
+        <option value="WAITING_HUMAN">等待审批</option>
+      </select></label>
+      <label>类型 <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}>
+        <option value="ALL">全部</option><option value="enterprise_assistant">企业智能助手</option>
+        <option value="multi_agent">Multi-Agent</option><option value="supplier_eol">Supplier EOL</option>
+        <option value="material_substitution">Material Substitution</option>
+      </select></label>
+    </div>
+    <section className="run-list">
         {loading && <p className="muted">正在加载运行记录…</p>}
-        {!loading && runs.length === 0 && <p className="muted">暂无运行记录。</p>}
-        {runs.map((run) => <button key={run.run_id} type="button"
-          className={`run-list-item ${detail?.run_id === run.run_id ? "active" : ""}`}
-          onClick={() => void open(run.run_id)}>
+        {!loading && visibleRuns.length === 0 && <p className="muted">暂无符合条件的运行记录。</p>}
+        <div className="run-card-grid">{visibleRuns.map((run) => <article key={run.run_id}
+          className="run-card">
           <span className="run-list-title">{names[run.workflow_name] || run.workflow_name}</span>
-          <span className={`run-status run-status-${run.status.toLowerCase()}`}>
-            {statuses[run.status] || run.status}</span>
+          <span className={`run-status run-status-${(run.analysis_status === "PARTIAL" ? "partial" : run.status).toLowerCase()}`}>
+            {run.analysis_status === "PARTIAL" ? "部分完成" : businessStatus(run.status)}</span>
           <small>{formatShanghaiTime(run.started_at)} · {elapsed(run.duration_ms)}</small>
           <small>{run.has_supervisor ? "包含 Supervisor" : "无 Supervisor"} ·
-            {run.called_tools.length} 个 Tool</small>
-        </button>)}
+            {run.agent_count} 个 Agent · {run.called_tools.length} 个 Tool</small>
+          <button type="button" className="button button-secondary" onClick={() => void open(run.run_id)}>查看详情</button>
+        </article>)}</div>
       </section>
 
-      <section className="panel run-detail">
+      {(detail || detailLoading) && <div className="run-modal-backdrop" onClick={() => setDetail(null)}>
+      <section className="panel run-detail" role="dialog" aria-modal="true" aria-label="运行详情"
+        onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="run-modal-close" onClick={() => setDetail(null)}>关闭详情</button>
         {detailLoading && <p className="muted">正在加载详情…</p>}
         {!detailLoading && !detail && <p className="muted">请选择一条运行记录。</p>}
         {!detailLoading && detail && <>
           <div className="panel-heading compact">
             <div><h3>{names[detail.workflow_name] || detail.workflow_name}</h3>
-              <p>{statuses[detail.status] || detail.status}</p></div>
+              <p>{detail.analysis_status === "PARTIAL" ? "部分完成" : businessStatus(detail.status)}</p></div>
             <span className="count-badge">{elapsed(detail.duration_ms)}</span>
           </div>
           <div className="run-metadata">
@@ -121,7 +141,7 @@ export default function AgentRunCenter() {
               return <div className="run-domain" key={name}>
                 <strong>{names[name]}</strong>
                 <span>{!selected ? "未选择" : !step ? "已选择，未执行" :
-                  statuses[step.status] || step.status}</span>
+                  businessStatus(step.status)}</span>
               </div>;
             })}</div>
           </div>}
@@ -130,13 +150,13 @@ export default function AgentRunCenter() {
           <ol className="run-timeline">{detail.steps.map((step) => <li key={step.step_id}>
             <div className="run-step-header">
               <strong>{names[step.node_name] || step.agent_name || step.node_name}</strong>
-              <span>{statuses[step.status] || step.status} · {elapsed(step.duration_ms)}</span>
+              <span>{businessStatus(step.status)} · {elapsed(step.duration_ms)}</span>
             </div>
             <small>{formatShanghaiTime(step.started_at)}</small>
             <p>{step.summary}</p>
             {step.tool_calls.map((call) => <div className="run-tool" key={call.tool_call_id}>
               <strong>{call.tool_name}</strong>
-              <span>{statuses[call.status] || call.status} · {elapsed(call.duration_ms)}</span>
+              <span>{businessStatus(call.status)} · {elapsed(call.duration_ms)}</span>
               <p>参数：{Object.entries(call.arguments).map(([key, value]) =>
                 `${key}=${String(value)}`).join("，") || "无"}</p>
               <p>{call.result_summary}</p>
@@ -147,7 +167,7 @@ export default function AgentRunCenter() {
             <h4>受控执行任务</h4>
             {detail.execution_jobs.map((job) => <div className="run-job" key={job.execution_job_id}>
               <strong>{job.title}</strong><span>{jobTypes[job.action_type] || job.action_type} ·
-                {statuses[job.status] || job.status}</span>
+                {businessStatus(job.status)}</span>
               <p>{job.description}</p>
               <small>{job.owner_department || "待分派"} · {job.related_part_number || "—"} ·
                 {formatShanghaiTime(job.created_at)}</small>
@@ -160,7 +180,6 @@ export default function AgentRunCenter() {
             </li>)}</ul>
           </div>}
         </>}
-      </section>
-    </div>
+      </section></div>}
   </div>;
 }

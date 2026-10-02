@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import uuid
 from collections.abc import Sequence
 
@@ -48,20 +50,28 @@ class _StrategyLLM:
 
 
 class _ReviewLLM:
+    def __init__(self, decisions: tuple[str, ...] = ("PASS",)) -> None:
+        self.decisions = decisions
+        self.calls = 0
+
     def invoke_with_tools(
         self, *, messages: Sequence[BaseMessage], tools: Sequence[BaseTool]
     ) -> AIMessage:
+        decision = self.decisions[min(self.calls, len(self.decisions) - 1)]
+        self.calls += 1
         return AIMessage(content=json.dumps({
-            "decision": "PASS", "summary": "事实与策略一致",
-            "issues": [], "recommendations": [],
+            "decision": decision, "summary": "事实与策略一致" if decision == "PASS" else "策略仍有风险",
+            "issues": [] if decision == "PASS" else ["应核验替代方案的实施风险"],
+            "recommendations": [] if decision == "PASS" else ["明确风险后由人工决定"],
         }, ensure_ascii=False))
 
 
-def _client(kind: str, saver: object, *, fake_llm: bool) -> TestClient:
+def _client(kind: str, saver: object, *, fake_llm: bool,
+            review_llm: _ReviewLLM | None = None) -> TestClient:
     kwargs = {
         "checkpointer": saver,
         "strategy_agent_factory": (lambda: StrategyAgent(_StrategyLLM())) if fake_llm else None,
-        "review_agent_factory": (lambda: ReviewAgent(_ReviewLLM())) if fake_llm else None,
+        "review_agent_factory": (lambda: ReviewAgent(review_llm or _ReviewLLM())) if fake_llm else None,
     }
     if kind == "supplier_eol":
         return TestClient(create_app(runtime=SupplierEOLWorkflowRuntime(**kwargs)))
@@ -138,6 +148,9 @@ def test_restart_recovery_and_single_approval(kind: str, decision: str) -> None:
             assert started.json()["status"] == "INTERRUPTED"
             state = started.json()["state"]
             assert started.json()["approval_request"]
+            assert state["review_count"] == 1
+            assert state["review_exhausted"] is False
+            assert state["review_result"]["decision"] == "PASS"
             assert client1.post(path, json=payload).status_code == 409
         finally:
             pool1.close()
@@ -241,6 +254,104 @@ def test_restart_recovery_and_single_approval(kind: str, decision: str) -> None:
 
 
 @pytest.mark.parametrize("kind", ["supplier_eol", "material_substitution"])
+@pytest.mark.parametrize("reviews,decision", [
+    (("REVISE", "PASS"), "REJECT"),
+    (("REVISE", "REVISE"), "APPROVE"),
+    (("REVISE", "REVISE"), "REJECT"),
+])
+def test_review_limit_interrupt_restart_and_human_decision(
+    kind: str, reviews: tuple[str, ...], decision: str,
+) -> None:
+    thread_id = f"review-human-{uuid.uuid4().hex[:12]}"
+    path = f"/api/v1/workflows/{'supplier-eol' if kind == 'supplier_eol' else 'material-substitution'}"
+    payload: dict[str, object] = {
+        "thread_id": thread_id, "part_number": "BRG-6204-A", "as_of_date": "2026-09-20",
+    }
+    if kind == "supplier_eol":
+        payload.update({
+            "revision": "A", "supplier_code": "SUP-001", "supplier_name": "MotionWorks",
+            "last_time_buy_date": "2026-11-30", "eol_date": "2027-01-31",
+        })
+    else:
+        payload.update({"revision_code": "A", "candidate_part_number": "BRG-6204-B"})
+    state = None
+    review_llm = _ReviewLLM(reviews)
+    try:
+        saver1, pool1 = create_postgres_checkpointer()
+        try:
+            started = _client(kind, saver1, fake_llm=True, review_llm=review_llm).post(
+                path, json=payload,
+            )
+            assert started.status_code == 200, started.text
+            body = started.json()
+            state = body["state"]
+            assert body["status"] == "INTERRUPTED"
+            assert review_llm.calls == 2
+            assert state["review_count"] == 2
+            assert state["revision_count"] == 1
+            assert state["review_result"]["decision"] == reviews[-1]
+            assert state["review_exhausted"] is (reviews[-1] == "REVISE")
+            assert body["approval_request"]["review_exhausted"] is state["review_exhausted"]
+            assert bool(body["approval_request"]["human_intervention_reason"]) is state["review_exhausted"]
+            assert state["approval"] is None and state["execution_result"] is None
+            with create_session() as session:
+                assert session.scalar(select(AgentRun.status).where(
+                    AgentRun.run_id == uuid.UUID(state["run_id"]),
+                )) == "WAITING_HUMAN"
+        finally:
+            pool1.close()
+
+        saver2, pool2 = create_postgres_checkpointer()
+        try:
+            client = _client(kind, saver2, fake_llm=False)
+            restored = client.get(f"{path}/{thread_id}")
+            assert restored.status_code == 200, restored.text
+            assert restored.json()["status"] == "INTERRUPTED"
+            assert restored.json()["state"]["run_id"] == state["run_id"]
+            response = client.post(f"{path}/{thread_id}/approval", json={
+                "decision": decision, "comment": "知悉评审风险并作出人工决定", "reviewer": "qa",
+            })
+            assert response.status_code == 200, response.text
+            state = response.json()["state"]
+            assert response.json()["status"] == "COMPLETED"
+            assert state["review_result"]["decision"] == reviews[-1]
+            assert state["approval"]["decision"] == decision
+            assert bool(state["execution_result"]) is (decision == "APPROVE")
+            assert client.post(f"{path}/{thread_id}/approval", json={
+                "decision": decision, "reviewer": "qa",
+            }).status_code == 409
+            with create_session() as session:
+                run_id = uuid.UUID(state["run_id"])
+                ecr_id = uuid.UUID(state["ecr_id"])
+                assert session.scalar(select(AgentRun.status).where(AgentRun.run_id == run_id)) == "SUCCEEDED"
+                assert session.scalar(select(func.count()).select_from(ChangeCase).where(
+                    ChangeCase.case_id == uuid.UUID(state["case_id"]),
+                )) == 1
+                assert session.scalar(select(func.count()).select_from(EngineeringChangeOrder).where(
+                    EngineeringChangeOrder.ecr_id == ecr_id,
+                )) == (1 if decision == "APPROVE" else 0)
+                if decision == "APPROVE":
+                    assert session.scalar(select(func.count()).select_from(ExecutionJob).where(
+                        ExecutionJob.eco_id == uuid.UUID(state["execution_result"]["eco_id"]),
+                    )) == 4
+                events = list(session.scalars(select(AuditEvent).where(AuditEvent.run_id == run_id)))
+                human = next(event for event in events if event.action == f"HUMAN_{decision}")
+                assert human.event_metadata["review_decision"] == reviews[-1]
+                assert human.event_metadata["review_exhausted"] is state["review_exhausted"]
+                assert human.event_metadata["review_risk_accepted"] is (
+                    reviews[-1] == "REVISE" and decision == "APPROVE"
+                )
+                if decision == "REJECT":
+                    assert not any(event.action == "EXECUTION_JOB_CREATED" for event in events)
+                else:
+                    assert any(event.action == "EXECUTION_JOB_CREATED" for event in events)
+        finally:
+            pool2.close()
+    finally:
+        _cleanup(kind, thread_id, state)
+
+
+@pytest.mark.parametrize("kind", ["supplier_eol", "material_substitution"])
 def test_missing_checkpoint_and_unavailable_pool(kind: str) -> None:
     path = f"/api/v1/workflows/{'supplier-eol' if kind == 'supplier_eol' else 'material-substitution'}"
     saver, pool = create_postgres_checkpointer()
@@ -250,3 +361,85 @@ def test_missing_checkpoint_and_unavailable_pool(kind: str) -> None:
     response = client.get(f"{path}/missing-{uuid.uuid4().hex}")
     assert response.status_code == 503
     assert "状态存储" in response.json()["detail"]
+
+
+@pytest.mark.skipif(
+    os.getenv("CHANGEPILOT_REAL_REVIEW_SMOKE") != "1",
+    reason="explicit real DeepSeek smoke only",
+)
+def test_real_deepseek_supplier_eol_reaches_human_gate() -> None:
+    thread_id = f"real-review-{uuid.uuid4().hex[:12]}"
+    path = "/api/v1/workflows/supplier-eol"
+    state = None
+    saver, pool = create_postgres_checkpointer()
+    try:
+        client = _client("supplier_eol", saver, fake_llm=False)
+        response = client.post(path, json={
+            "thread_id": thread_id, "part_number": "BRG-6204-A", "revision": "A",
+            "supplier_code": "SUP-001", "supplier_name": "MotionWorks",
+            "last_time_buy_date": "2026-11-30", "eol_date": "2027-01-31",
+            "as_of_date": "2026-09-20",
+        })
+        assert response.status_code == 200, response.text
+        body = response.json()
+        state = body["state"]
+        print(f"DeepSeek review={state['review_result']['decision']}; "
+              f"rounds={state['review_count']}; exhausted={state['review_exhausted']}; "
+              f"status={body['status']}")
+        assert body["status"] == "INTERRUPTED"
+        assert body["approval_request"] is not None
+        assert state["approval"] is None and state["execution_result"] is None
+        ended = client.post(f"{path}/{thread_id}/approval", json={
+            "decision": "REJECT", "comment": "smoke test cleanup", "reviewer": "qa",
+        })
+        assert ended.status_code == 200, ended.text
+        state = ended.json()["state"]
+        assert state["approval"]["decision"] == "REJECT"
+    finally:
+        pool.close()
+        _cleanup("supplier_eol", thread_id, state)
+
+
+@pytest.mark.skipif(
+    os.getenv("CHANGEPILOT_REAL_MATERIAL_CHINESE_SMOKE") != "1",
+    reason="explicit real DeepSeek Chinese smoke only",
+)
+def test_real_deepseek_material_substitution_chinese() -> None:
+    thread_id = f"real-material-zh-{uuid.uuid4().hex[:12]}"
+    path = "/api/v1/workflows/material-substitution"
+    state = None
+    saver, pool = create_postgres_checkpointer()
+    try:
+        client = _client("material_substitution", saver, fake_llm=False)
+        response = client.post(path, json={
+            "thread_id": thread_id, "part_number": "BRG-6204-A", "revision_code": "A",
+            "candidate_part_number": "BRG-6204-B", "as_of_date": "2026-09-20",
+        })
+        assert response.status_code == 200, response.text
+        body = response.json()
+        state = body["state"]
+        assert body["status"] == "INTERRUPTED"
+        assert state["strategies"] and state["review_result"]
+        for strategy in state["strategies"]:
+            for field in ("title", "summary", "rationale"):
+                assert re.search(r"[\u4e00-\u9fff]", strategy[field]), (field, strategy[field])
+            for field in ("actions", "risks"):
+                assert all(re.search(r"[\u4e00-\u9fff]", item) for item in strategy[field])
+        review = state["review_result"]
+        assert re.search(r"[\u4e00-\u9fff]", review["summary"]), review["summary"]
+        assert all(re.search(r"[\u4e00-\u9fff]", item)
+                   for field in ("issues", "recommendations") for item in review[field])
+        print(json.dumps({
+            "strategy_count": len(state["strategies"]),
+            "review_decision": review["decision"],
+            "strategy_title": state["strategies"][0]["title"],
+            "review_summary": review["summary"],
+        }, ensure_ascii=False))
+        ended = client.post(f"{path}/{thread_id}/approval", json={
+            "decision": "REJECT", "comment": "smoke test cleanup", "reviewer": "qa",
+        })
+        assert ended.status_code == 200, ended.text
+        state = ended.json()["state"]
+    finally:
+        pool.close()
+        _cleanup("material_substitution", thread_id, state)

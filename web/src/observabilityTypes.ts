@@ -3,11 +3,13 @@ export interface AgentRunSummary {
   thread_id: string | null;
   workflow_name: string;
   status: string;
+  analysis_status: string | null;
   started_at: string;
   finished_at: string | null;
   duration_ms: number | null;
   error_summary: string | null;
   has_supervisor: boolean;
+  agent_count: number;
   selected_agents: string[];
   called_tools: string[];
 }

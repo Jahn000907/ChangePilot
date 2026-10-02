@@ -24,7 +24,7 @@ from app.workflows.state import (
     SupplierEOLWorkflowState,
 )
 
-MAX_STRATEGY_REVISIONS = 2
+MAX_REVIEW_ITERATIONS = 2
 
 
 def build_supplier_eol_workflow(
@@ -54,7 +54,23 @@ def build_supplier_eol_workflow(
             trace,
         ),
     )
-    graph.add_node("review", _traced_node("review", "ReviewAgent", review, trace))
+    def review_node(state: SupplierEOLWorkflowState) -> dict[str, object]:
+        update = review(state)
+        reviewed = SupplierEOLWorkflowState.model_validate(
+            {**state.model_dump(mode="python"), **update}
+        )
+        review_count = state.review_count + 1
+        exhausted = (
+            reviewed.review_result is not None
+            and reviewed.review_result.decision == "REVISE"
+            and review_count >= MAX_REVIEW_ITERATIONS
+        )
+        return {**update, "review_count": review_count, "review_exhausted": exhausted,
+                "approval_status": "PENDING" if exhausted or
+                (reviewed.review_result is not None and reviewed.review_result.decision == "PASS")
+                else "NOT_STARTED"}
+
+    graph.add_node("review", _traced_node("review", "ReviewAgent", review_node, trace))
     graph.add_node(
         "human_approval",
         _traced_node("human_approval", None, human_approval_node, trace),
@@ -71,7 +87,6 @@ def build_supplier_eol_workflow(
         _route_after_review,
         {
             "human_approval": "human_approval",
-            "revision_limit": END,
             "revise": "strategy_generation",
         },
     )
@@ -156,11 +171,8 @@ def _route_after_review(state: SupplierEOLWorkflowState | dict[str, object]) -> 
         raise ValueError("review node completed without a review result")
     if workflow_state.review_result.decision == "PASS":
         return "human_approval"
-    if (
-        workflow_state.review_result.decision == "REVISE"
-        and workflow_state.revision_count >= MAX_STRATEGY_REVISIONS
-    ):
-        return "revision_limit"
+    if workflow_state.review_result.decision == "REVISE" and workflow_state.review_exhausted:
+        return "human_approval"
     return "revise"
 
 
@@ -212,6 +224,10 @@ def _execution_result(
             approval_request=HumanApprovalRequest.model_validate(pending.value),
             interrupt_id=pending.id,
         )
+    if any(getattr(task, "error", None) for task in snapshot.tasks):
+        return SupplierEOLWorkflowExecutionResult(thread_id=thread_id, status="FAILED", state=state)
+    if snapshot.next:
+        return SupplierEOLWorkflowExecutionResult(thread_id=thread_id, status="RUNNING", state=state)
     return SupplierEOLWorkflowExecutionResult(
         thread_id=thread_id,
         status="COMPLETED",
@@ -326,6 +342,8 @@ def _step_output_summary(
         return {
             "decision": state.review_result.decision.value if state.review_result else None,
             "issue_count": len(state.review_result.issues) if state.review_result else 0,
+            "review_count": state.review_count,
+            "review_exhausted": state.review_exhausted,
         }
     if node_name == "human_approval":
         return {
@@ -379,7 +397,12 @@ def _record_audit_events(
                 "decision": state.approval.decision.value,
                 "comment": state.approval.comment,
             },
-            metadata={"selected_strategy_index": state.approval.selected_strategy_index},
+            metadata={
+                "selected_strategy_index": state.approval.selected_strategy_index,
+                "review_decision": state.review_result.decision.value if state.review_result else None,
+                "review_exhausted": state.review_exhausted,
+                "review_risk_accepted": bool(state.review_exhausted and state.approval.decision == "APPROVE"),
+            },
         )
     elif node_name == "execution" and state.execution_result is not None:
         execution = state.execution_result

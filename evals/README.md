@@ -17,18 +17,21 @@ V2.8 企业智能助手评测分为：定向 `pytest`（确定性事实与安全
 
 ```powershell
 uv run python -m evals.run
-uv run python -m evals.run --real-llm --limit 2
 ```
 
-真实模型与 LangSmith 均需显式配置；默认 Benchmark 不上传。LangSmith Trace
-通过 `LANGSMITH_TRACING=true` 启用，DeepSeek 原有 URL/timeout/retry 不变。
-仅在准备同步数据集或运行实验时使用：
+本地 Benchmark 默认不调用真实模型、不上传数据；可显式加 `--real-llm` 使用 DeepSeek。
+LangSmith Dataset 入口仅准备或同步 Case，不运行评测：
 
 ```powershell
-uv run python -m evals.langsmith_dataset --limit 2
-uv run python -m evals.langsmith_experiment --limit 2
+uv run python -m evals.langsmith_dataset
+```
+
+LangSmith Experiment / Judge 入口运行可选的真实模型实验和主观评分：
+
+```powershell
 uv run python -m evals.langsmith_experiment --limit 2 --real-llm --judge
 ```
 
 `--judge` 是可选的主观分析/完整性/清晰度评分；客观企业事实仍由确定性指标判定。
-关闭 `LANGSMITH_TRACING` 或不配置 Key 时，正常产品运行和本地 Benchmark 不依赖 LangSmith 服务。
+真实模型与 LangSmith 需分别显式配置。关闭 `LANGSMITH_TRACING` 或不配置 Key 时，
+正常产品运行和本地 Benchmark 不依赖 LangSmith 服务。

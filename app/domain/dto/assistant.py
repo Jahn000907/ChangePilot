@@ -16,10 +16,14 @@ class AssistantContext(BaseModel):
     current_part: str | None = None
     current_revision: str | None = None
     current_supplier_code: str | None = None
+    current_supplier_name: str | None = None
     current_purchase_order: str | None = None
     current_production_order: str | None = None
     current_sales_order: str | None = None
     current_focus: Literal["product", "part", "supplier", "purchase_order", "production_order", "sales_order"] | None = None
+    last_intent: str | None = None
+    last_result_type: str | None = None
+    last_result_entities: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ConversationMessage(BaseModel):
@@ -55,4 +59,4 @@ class AssistantTurnResult(BaseModel):
     assistant_message: ConversationMessage
     context: AssistantContext
     workflow_suggestion: WorkflowSuggestion | None = None
-    answer_status: Literal["SUCCESS", "NO_DATA", "MISSING_INPUT", "TOOL_ERROR", "LLM_ERROR"] = "SUCCESS"
+    answer_status: Literal["SUCCESS", "PARTIAL", "NO_DATA", "MISSING_INPUT", "TOOL_ERROR", "LLM_ERROR"] = "SUCCESS"

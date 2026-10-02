@@ -52,6 +52,14 @@ def get_conversation(conversation_id: uuid.UUID, service: Service) -> Conversati
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.delete("/{conversation_id}", status_code=204)
+def delete_conversation(conversation_id: uuid.UUID, service: Service) -> None:
+    try:
+        service.delete(conversation_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/{conversation_id}/messages", response_model=AssistantTurnResult)
 def send_message(
     conversation_id: uuid.UUID, request: SendMessageRequest, service: Service

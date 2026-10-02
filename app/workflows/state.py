@@ -47,8 +47,10 @@ class ApprovalStatus(StrEnum):
 class WorkflowRunStatus(StrEnum):
     """Whether a public workflow invocation paused or finished."""
 
+    RUNNING = "RUNNING"
     INTERRUPTED = "INTERRUPTED"
     COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class ExecutionStatus(StrEnum):
@@ -78,6 +80,8 @@ class SupplierEOLWorkflowState(BaseModel):
     strategy_status: StrategyGenerationStatus = StrategyGenerationStatus.NOT_STARTED
     review_result: ReviewResult | None = None
     review_status: ReviewStatus = ReviewStatus.NOT_STARTED
+    review_count: int = Field(default=0, ge=0)
+    review_exhausted: bool = False
     revision_count: int = Field(default=0, ge=0)
     approval: HumanApproval | None = None
     approval_status: ApprovalStatus = ApprovalStatus.NOT_STARTED
